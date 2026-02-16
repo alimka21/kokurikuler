@@ -11,7 +11,7 @@ import Dashboard from './components/Dashboard';
 import MyProjects from './components/MyProjects';
 import Editor from './components/Editor';
 import IdentitySettings from './components/IdentitySettings';
-import AdminDashboard from './components/AdminDashboard'; // Import Admin
+import AdminDashboard from './components/AdminDashboard'; 
 import Login from './components/Login'; 
 
 // Layout
@@ -36,74 +36,89 @@ const App: React.FC = () => {
     const [user, setUser] = useState<User | null>(null);
     const [isLoadingUser, setIsLoadingUser] = useState(true);
 
+    // App State
     const [view, setView] = useState<ViewMode>('dashboard');
     const [isSidebarOpen, setSidebarOpen] = useState(false);
-    
-    // Notification State
     const [toast, setToast] = useState<{ show: boolean; msg: string; type: NotificationType }>({ show: false, msg: '', type: 'success' });
 
     const showNotify = (msg: string, type: NotificationType = 'success') => {
         setToast({ show: true, msg, type });
     };
 
-    // --- Auth Logic ---
+    // --- NEW ROBUST AUTH ARCHITECTURE ---
     useEffect(() => {
-        // 1. Check active session on mount
-        const checkSession = async () => {
+        // Helper to construct user object from session + optional db profile
+        const constructUser = async (sessionUser: any) => {
+            // 1. Construct Basic User from Auth Metadata (Fail-safe)
+            const meta = sessionUser.user_metadata || {};
+            const basicUser: User = {
+                id: sessionUser.id,
+                email: sessionUser.email || '',
+                name: meta.name || sessionUser.email?.split('@')[0] || 'Pengguna',
+                school: meta.school || '',
+                role: 'user', // Default role
+                is_registered: true
+            };
+
+            // Set immediately so UI loads fast
+            setUser(basicUser);
+
+            // 2. OPTIONAL: Fetch Role & Detailed Profile from DB
+            // If DB is down or row doesn't exist, this fails silently without blocking login.
             try {
-                const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-                
-                if (sessionError) {
-                    throw sessionError;
-                }
+                if (!supabase) return;
 
-                if (session?.user?.email) {
-                    // Fetch user details from public.users whitelist
-                    // Normalize email to lower case to match Login logic
-                    const emailToFind = session.user.email.toLowerCase();
+                const { data: profile, error } = await supabase
+                    .from('users')
+                    .select('*')
+                    .eq('id', sessionUser.id)
+                    .maybeSingle();
 
-                    const { data: profile, error: profileError } = await supabase
-                        .from('users')
-                        .select('*')
-                        .eq('email', emailToFind)
-                        .maybeSingle();
-                    
-                    if (profileError) {
-                        // Warn only, don't crash. This happens if table is missing or RLS blocks it.
-                        console.warn("Profile fetch warning (Check DB/RLS):", profileError.message);
-                    } else if (profile) {
-                        setUser({ ...profile, id: session.user.id });
-                    } else {
-                        // Session exists but no profile found in public.users
-                        console.warn("User authenticated but no profile found in whitelist.");
+                if (error) {
+                    // Silent fail for schema errors to prevent user panic
+                    // Only log if it's NOT a schema/relation error
+                    if (!error.message?.includes('relation') && !error.message?.includes('schema')) {
+                        console.warn("Profile fetch warning:", error.message);
                     }
+                } else if (profile) {
+                    // Merge DB profile with Auth ID
+                    setUser({
+                        ...basicUser,
+                        ...profile, // Overwrites name/school/role from DB if exists
+                        id: sessionUser.id // Ensure ID remains from Auth
+                    });
                 }
-            } catch (err) {
-                console.error("Auth initialization error:", err);
+            } catch (e) {
+                // Completely silent catch for optional profile fetch
+            }
+        };
+
+        const initAuth = async () => {
+            setIsLoadingUser(true);
+            try {
+                const { data: { session } } = await supabase.auth.getSession();
+                if (session?.user) {
+                    await constructUser(session.user);
+                } else {
+                    setUser(null);
+                }
+            } catch (e) {
+                console.error("Auth init error:", e);
+                setUser(null);
             } finally {
                 setIsLoadingUser(false);
             }
         };
-        checkSession();
 
-        // 2. Listen for Auth Changes (Sign In, Sign Out)
+        initAuth();
+
+        // Listen for Auth Changes
         const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-             if (event === 'SIGNED_OUT') {
+             if (event === 'SIGNED_IN' && session?.user) {
+                 await constructUser(session.user);
+             } else if (event === 'SIGNED_OUT') {
                  setUser(null);
-                 setView('dashboard');
-             } else if (event === 'SIGNED_IN' && session?.user.email) {
-                 // Refresh user data on sign in
-                 const emailToFind = session.user.email.toLowerCase();
-                 
-                 const { data: profile } = await supabase
-                    .from('users')
-                    .select('*')
-                    .eq('email', emailToFind)
-                    .maybeSingle();
-                 
-                 if (profile) {
-                     setUser({ ...profile, id: session.user.id });
-                 }
+                 window.location.hash = '';
              }
         });
 
@@ -112,10 +127,56 @@ const App: React.FC = () => {
 
     const handleLogout = async () => {
         await supabase.auth.signOut();
-        // User state will be cleared by onAuthStateChange
+        setView('dashboard');
+        setUser(null);
     };
 
-    // Use Custom Hook for Logic (Pass user context)
+    // --- Routing Logic (Hash based) ---
+    useEffect(() => {
+        if (!user) return;
+
+        const handleHashChange = () => {
+            const hash = window.location.hash.replace('#/', '');
+            
+            if (hash === 'admin') {
+                if (user.role === 'admin') setView('admin');
+                else {
+                    setView('dashboard');
+                    window.location.hash = '#/dashboard';
+                }
+            }
+            else if (hash === 'projects') setView('projects');
+            else if (hash === 'wizard') setView('wizard');
+            else if (hash === 'editor') setView('editor');
+            else if (hash === 'settings') setView('identity');
+            else {
+                setView('dashboard');
+            }
+        };
+
+        handleHashChange();
+        window.addEventListener('hashchange', handleHashChange);
+        return () => window.removeEventListener('hashchange', handleHashChange);
+    }, [user?.role]);
+
+    // Sync View to Hash
+    useEffect(() => {
+        if (!user) return;
+        const hash = window.location.hash.replace('#/', '');
+        let targetHash = 'dashboard';
+
+        if (view === 'admin') targetHash = 'admin';
+        else if (view === 'projects') targetHash = 'projects';
+        else if (view === 'wizard') targetHash = 'wizard';
+        else if (view === 'editor') targetHash = 'editor';
+        else if (view === 'identity') targetHash = 'settings';
+
+        if (hash !== targetHash) {
+            window.history.pushState(null, '', `#/${targetHash}`);
+        }
+    }, [view, user]);
+
+    // Use Custom Hook for Project Logic
     const {
         project,
         savedProjects, 
@@ -126,7 +187,6 @@ const App: React.FC = () => {
         goToStep,
         loadingAI,
         isFinalizing,
-        // Handlers
         saveProject,
         createNewProject,
         loadProject,
@@ -141,6 +201,8 @@ const App: React.FC = () => {
         exportAnnualDocx
     } = useProjectWizard(user);
 
+    // --- RENDER ---
+
     if (isLoadingUser) {
         return (
             <div className="min-h-screen flex items-center justify-center bg-slate-50">
@@ -152,7 +214,6 @@ const App: React.FC = () => {
         );
     }
 
-    // Render Login if not authenticated
     if (!user) {
         return <Login onLogin={(u) => setUser(u)} />;
     }
@@ -165,10 +226,6 @@ const App: React.FC = () => {
     const handleLoadProject = (id: string) => {
         loadProject(id);
         setView('wizard');
-    };
-
-    const handleSaveDraft = () => {
-        saveProject(); // Saves to Cloud via Hook
     };
 
     const renderStepContent = () => {
@@ -204,7 +261,6 @@ const App: React.FC = () => {
                 selectedIdea={project.title}
                 onSelectIdea={(t) => {
                     updateProject('title', t);
-                    // Also find and update the description based on the selected title
                     const selectedIdeaObj = project.creativeIdeas.find(idea => idea.title === t);
                     if (selectedIdeaObj) {
                         updateProject('projectDescription', selectedIdeaObj.description);
@@ -231,7 +287,7 @@ const App: React.FC = () => {
                 isGenerating={loadingAI}
             />;
             case 7: return <StepFinalization 
-                project={project} // Pass full project
+                project={project}
                 isReady={!!project.assessmentPlan}
                 isFinalizing={isFinalizing}
                 themeName={project.selectedTheme}
@@ -239,7 +295,7 @@ const App: React.FC = () => {
                 onViewEditor={() => setView('editor')}
                 onDownload={exportDocx}
                 onDownloadAnnual={exportAnnualDocx}
-                onSaveProject={handleSaveDraft}
+                onSaveProject={saveProject}
             />;
             default: return null;
         }
@@ -254,7 +310,6 @@ const App: React.FC = () => {
 
     return (
         <div className="flex h-screen overflow-hidden bg-background-light font-sans text-slate-900">
-            
             <NotificationToast 
                 isVisible={toast.show} 
                 message={toast.msg} 
@@ -293,7 +348,6 @@ const App: React.FC = () => {
                     
                     {view === 'identity' && <IdentitySettings project={project} onChange={updateProject} onSave={() => showNotify('Data Sekolah & Admin berhasil disimpan!', 'success')} />}
 
-                    {/* Admin View */}
                     {view === 'admin' && user.role === 'admin' && <AdminDashboard />}
 
                     {view === 'wizard' && (
@@ -330,7 +384,7 @@ const App: React.FC = () => {
                             <div className="flex items-center gap-3">
                                 {currentStep < STEPS.length - 1 && (
                                     <button
-                                        onClick={handleSaveDraft}
+                                        onClick={() => saveProject()}
                                         className="px-6 py-3 rounded-xl font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 transition-all flex items-center gap-2"
                                     >
                                         <Save className="w-4 h-4" /> Simpan

@@ -26,33 +26,53 @@ export const useProjectWizard = (user: any) => {
 
     // --- SUPABASE INTEGRATION ---
     useEffect(() => {
-        if (user?.email) {
+        if (user?.email && user?.id !== 'emergency-admin-id') {
             fetchProjects();
         }
     }, [user]);
 
     const fetchProjects = async () => {
-        const { data, error } = await supabase
-            .from('projects')
-            .select('*')
-            .eq('user_email', user.email)
-            .order('updated_at', { ascending: false });
+        try {
+            const { data, error } = await supabase
+                .from('projects')
+                .select('*')
+                .eq('user_email', user.email)
+                .order('updated_at', { ascending: false });
 
-        if (!error && data) {
-            const mappedProjects = data.map((d: any) => {
-                // Fallback if content is null (legacy data)
-                const content = d.content || {};
-                return {
-                    ...INITIAL_PROJECT_STATE, // Ensure defaults
-                    ...content,
-                    id: d.id, // Database ID is source of truth
-                };
-            });
-            setSavedProjects(mappedProjects);
+            if (error) {
+                // Ignore missing table error (code 42P01) or other schema issues
+                if (error.code === '42P01' || error.message.includes('relation') || error.message.includes('schema')) {
+                    setSavedProjects([]);
+                    return;
+                }
+                console.warn("Fetch projects error:", error.message);
+                return;
+            }
+
+            if (data) {
+                const mappedProjects = data.map((d: any) => {
+                    // Fallback if content is null (legacy data)
+                    const content = d.content || {};
+                    return {
+                        ...INITIAL_PROJECT_STATE, // Ensure defaults
+                        ...content,
+                        id: d.id, // Database ID is source of truth
+                    };
+                });
+                setSavedProjects(mappedProjects);
+            }
+        } catch (e) {
+            // Silent catch
         }
     };
 
     const persistToSupabase = async (proj: ProjectState) => {
+        // Skip sync in emergency mode
+        if (user.id === 'emergency-admin-id') {
+            console.warn("Cloud sync disabled in Emergency Admin Mode");
+            return;
+        }
+
         // Prepare Payload: Hybrid Approach
         // 1. Relational Columns (for Indexing/Filtering)
         // 2. JSONB 'content' (for Full App State)
@@ -83,8 +103,14 @@ export const useProjectWizard = (user: any) => {
             .upsert(payload);
 
         if (error) {
-            console.error("Error saving to Supabase", error);
-            Swal.fire('Error', 'Gagal menyimpan ke cloud. Periksa koneksi internet.', 'error');
+            // Suppress schema errors if table doesn't exist yet
+            if (error.code === '42P01' || error.message.includes('relation')) {
+                // Do not show error alert to user, they can just use local state
+                console.warn("Cloud sync failed: Projects table missing.");
+            } else {
+                console.error("Error saving to Supabase", error);
+                Swal.fire('Error', 'Gagal menyimpan ke cloud. Periksa koneksi internet.', 'error');
+            }
         } else {
             fetchProjects(); // Refresh list to get server timestamp/consistency
         }

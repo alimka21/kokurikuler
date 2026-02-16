@@ -36,18 +36,46 @@ const AdminDashboard: React.FC = () => {
   const fetchData = async () => {
     setLoading(true);
     try {
-      // 1. Get Stats
-      const { count: userCount } = await supabase.from('users').select('*', { count: 'exact', head: true });
-      const { count: projectCount } = await supabase.from('projects').select('*', { count: 'exact', head: true });
-      setStats({ users: userCount || 0, projects: projectCount || 0 });
+      // 1. Get Stats (Safe Fetch)
+      // Check if tables exist by doing a lightweight query first or using try-catch
+      let userCount = 0;
+      let projectCount = 0;
+      
+      try {
+          const { count, error } = await supabase.from('users').select('*', { count: 'exact', head: true });
+          if (!error) userCount = count || 0;
+      } catch (e) {
+          console.warn("Could not fetch user stats:", e);
+      }
+
+      try {
+          const { count, error } = await supabase.from('projects').select('*', { count: 'exact', head: true });
+          if (!error) projectCount = count || 0;
+      } catch (e) {
+           console.warn("Could not fetch project stats:", e);
+      }
+      
+      setStats({ users: userCount, projects: projectCount });
 
       // 2. Get Users List
       const { data, error } = await supabase.from('users').select('*').order('created_at', { ascending: false });
-      if (error) throw error;
-      setUsers(data as User[]);
-    } catch (error) {
+      if (error) {
+          // If error is schema related, don't throw, just return empty list
+          if (error.message.includes('relation') || error.message.includes('schema')) {
+              console.warn("Table users likely missing:", error.message);
+              setUsers([]);
+          } else {
+              throw error;
+          }
+      } else {
+          setUsers(data as User[]);
+      }
+    } catch (error: any) {
       console.error("Error fetching admin data:", error);
-      Swal.fire('Error', 'Gagal memuat data admin.', 'error');
+      // Only show alert if it's not a schema error
+      if (!error.message?.includes('schema')) {
+          Swal.fire('Error', 'Gagal memuat data admin.', 'error');
+      }
     } finally {
       setLoading(false);
     }
@@ -94,13 +122,13 @@ const AdminDashboard: React.FC = () => {
     try {
       const payload = {
         ...editingUser,
-        email: editingUser.email.trim(),
+        email: editingUser.email.trim().toLowerCase(), // Force lowercase to match Login logic
         updated_at: new Date().toISOString()
       };
 
       const { error } = await supabase
         .from('users')
-        .upsert(payload) // Supabase will insert if ID missing, update if ID exists
+        .upsert(payload) 
         .select();
 
       if (error) throw error;
@@ -116,9 +144,9 @@ const AdminDashboard: React.FC = () => {
   };
 
   const filteredUsers = users.filter(u => 
-    u.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-    u.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    u.school.toLowerCase().includes(searchTerm.toLowerCase())
+    (u.name && u.name.toLowerCase().includes(searchTerm.toLowerCase())) || 
+    (u.email && u.email.toLowerCase().includes(searchTerm.toLowerCase())) ||
+    (u.school && u.school.toLowerCase().includes(searchTerm.toLowerCase()))
   );
 
   return (
@@ -137,14 +165,12 @@ const AdminDashboard: React.FC = () => {
         </div>
         
         <div className="flex gap-4">
-           {/* Stat Card 1 */}
            <div className="bg-white/10 backdrop-blur-sm p-4 rounded-2xl border border-white/10 min-w-[140px]">
               <div className="flex items-center gap-2 text-slate-400 text-xs uppercase font-bold mb-1">
                  <Users className="w-4 h-4" /> Total Users
               </div>
               <p className="text-3xl font-bold text-white">{loading ? '...' : stats.users}</p>
            </div>
-           {/* Stat Card 2 */}
            <div className="bg-white/10 backdrop-blur-sm p-4 rounded-2xl border border-white/10 min-w-[140px]">
               <div className="flex items-center gap-2 text-slate-400 text-xs uppercase font-bold mb-1">
                  <FolderOpen className="w-4 h-4" /> Total Projek
@@ -197,9 +223,9 @@ const AdminDashboard: React.FC = () => {
                     ) : (
                         filteredUsers.map((u) => (
                             <tr key={u.id} className="hover:bg-slate-50/80 transition-colors">
-                                <td className="px-6 py-4 font-bold text-slate-900">{u.name}</td>
+                                <td className="px-6 py-4 font-bold text-slate-900">{u.name || "-"}</td>
                                 <td className="px-6 py-4">{u.email}</td>
-                                <td className="px-6 py-4">{u.school}</td>
+                                <td className="px-6 py-4">{u.school || "-"}</td>
                                 <td className="px-6 py-4 text-center">
                                     <span className={`px-2 py-1 rounded-full text-[10px] font-bold uppercase ${u.role === 'admin' ? 'bg-purple-100 text-purple-700' : 'bg-slate-100 text-slate-600'}`}>
                                         {u.role || 'user'}
@@ -245,7 +271,7 @@ const AdminDashboard: React.FC = () => {
                             placeholder="nama@email.com"
                             value={editingUser.email || ''}
                             onChange={(e) => setEditingUser({...editingUser, email: e.target.value})}
-                            className="w-full pl-11 p-3 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all text-slate-900"
+                            className="w-full pl-11 p-3.5 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all text-slate-900"
                         />
                     </InputGroup>
                     

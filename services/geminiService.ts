@@ -164,43 +164,59 @@ export const recommendThemes = async (analysis: string, dimensions: Dimension[])
 
 export const generateCreativeIdeas = async (theme: string, format: string, analysis: string): Promise<CreativeIdeaOption[]> => {
     try {
-        // Prepare cleaner input for prompt
-        const safeAnalysis = analysis ? analysis.substring(0, 1500) : "Sekolah Menengah";
+        // Optimize context length
+        const safeAnalysis = analysis ? analysis.substring(0, 2000) : "Sekolah Menengah";
 
         const response = await ai.models.generateContent({
             model: MODEL_NAME,
             contents: `
-            Role: Konsultan Kreatif Projek Penguatan Profil Pelajar Pancasila (P5).
-            
-            INPUT DATA:
-            - Tema Besar: "${theme}"
-            - Bentuk Kegiatan: "${format}"
-            - Konteks Sekolah: "${safeAnalysis}"
+            BERTINDAKLAH SEBAGAI: Creative Director Program Pendidikan.
             
             TUGAS:
-            Berikan 3 opsi Ide Projek yang spesifik, kreatif, dan catchy.
+            Rancang 3 (tiga) konsep nama projek kokurikuler yang KREATIF, UNIK, dan MENARIK (Catchy) untuk siswa.
             
-            KETENTUAN OUPUT JSON:
-            1. title: Gunakan AKRONIM atau Singkatan Unik. Format: "AKRONIM: Kepanjangan". (Misal: "SABER: Sapu Bersih", "GELAS: Gerakan Lawan Sampah").
-            2. description: Buat 1 paragraf narasi (3-4 kalimat) yang menjelaskan inti kegiatan projek ini secara menarik. Deskripsi ini akan dipakai sebagai "Deskripsi Singkat" di modul.
+            KONTEKS PROJEK:
+            - Tema Besar: "${theme}"
+            - Bentuk Kegiatan: "${format}"
+            - Insight Sekolah: "${safeAnalysis}"
+            
+            KETENTUAN JUDUL (TITLE):
+            1. WAJIB berupa AKRONIM UNIK atau SINGKATAN MENARIK.
+            2. Contoh: 
+               - "GELAS (Gerakan Lawan Sampah)"
+               - "SABER (Sapu Bersih Lingkungan)"
+               - "KREATIF (Kreasi Edukatif Siswa Aktif)"
+               - "JEJAK (Jelajah Jajanan Lokal Kita)"
+            3. HINDARI judul membosankan seperti "Projek Tema Gaya Hidup" atau "Kegiatan P5".
+            
+            KETENTUAN DESKRIPSI:
+            1. Buat narasi singkat (2-3 kalimat) yang menjual dan persuasif.
+            2. Jelaskan aktivitas utamanya secara konkret.
+            
+            OUTPUT WAJIB JSON ARRAY:
+            [{ "title": "AKRONIM: Kepanjangan", "description": "Narasi menarik..." }]
             `,
             config: {
-                systemInstruction: SYSTEM_INSTRUCTION,
+                temperature: 0.85, // Higher creativity
+                topK: 40,
                 responseMimeType: "application/json",
                 responseSchema: {
                     type: Type.ARRAY,
                     items: {
                         type: Type.OBJECT,
                         properties: {
-                            title: { type: Type.STRING },
-                            description: { type: Type.STRING }
-                        }
+                            title: { type: Type.STRING, description: "Judul projek berupa akronim/singkatan unik. Contoh: 'GELAS: Gerakan Lawan Sampah'" },
+                            description: { type: Type.STRING, description: "Deskripsi singkat dan menarik tentang kegiatan projek." }
+                        },
+                        required: ["title", "description"]
                     }
                 }
             }
         });
+        
         const jsonStr = response.text || "[]";
         const result = JSON.parse(jsonStr);
+        
         // Fallback checks
         if (!Array.isArray(result) || result.length === 0) {
             console.warn("AI returned empty ideas");
