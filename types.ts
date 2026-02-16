@@ -16,7 +16,8 @@ export interface User {
   name: string;
   school: string;
   role: 'admin' | 'user';
-  is_registered?: boolean; // New flag to check if user has set up their account
+  is_registered?: boolean; 
+  force_password_change?: boolean; // New flag for first-time login
   created_at?: string;
 }
 

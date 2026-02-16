@@ -1,6 +1,6 @@
 
 import React, { useMemo } from 'react';
-import { GraduationCap, LayoutDashboard, FolderOpen, CheckCircle, Settings, ShieldCheck, LogOut } from 'lucide-react';
+import { GraduationCap, LayoutDashboard, FolderOpen, CheckCircle, Settings, ShieldCheck, LogOut, UserCircle } from 'lucide-react';
 import { STEPS } from '../../constants';
 import { ProjectState, User } from '../../types';
 
@@ -52,7 +52,11 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, currentView, onChangeView, cu
                     </button>
                     <button onClick={onEditIdentity} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all font-medium text-sm group ${currentView === 'identity' ? 'bg-primary/5 text-primary' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'}`}>
                         <Settings className={`w-5 h-5 ${currentView === 'identity' ? 'text-primary' : 'text-slate-400 group-hover:text-slate-600'}`} />
-                        <span>Data Sekolah & Admin</span>
+                        <span>Data Sekolah</span>
+                    </button>
+                    <button onClick={() => onChangeView('account')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all font-medium text-sm group ${currentView === 'account' ? 'bg-primary/5 text-primary' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'}`}>
+                        <UserCircle className={`w-5 h-5 ${currentView === 'account' ? 'text-primary' : 'text-slate-400 group-hover:text-slate-600'}`} />
+                        <span>Pengaturan Akun</span>
                     </button>
 
                     {/* Admin Menu Only */}
@@ -65,7 +69,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, currentView, onChangeView, cu
                 </div>
 
                 {/* Wizard Steps (Only visible if not in Admin view) */}
-                {currentView !== 'admin' && (
+                {currentView !== 'admin' && currentView !== 'account' && (
                 <div className="space-y-2">
                     <div className="flex items-center justify-between px-3 mb-2">
                         <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest">Tahapan Projek</h3>

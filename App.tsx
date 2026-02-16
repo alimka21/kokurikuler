@@ -12,8 +12,10 @@ import Dashboard from './components/Dashboard';
 import MyProjects from './components/MyProjects';
 import Editor from './components/Editor';
 import IdentitySettings from './components/IdentitySettings';
+import AccountSettings from './components/AccountSettings'; // New
 import AdminDashboard from './components/AdminDashboard'; 
 import Login from './components/Login'; 
+import ForcePasswordChange from './components/ForcePasswordChange'; // New
 
 // Layout
 import Sidebar from './components/layout/Sidebar';
@@ -30,7 +32,7 @@ import StepFinalization from './components/wizard/StepFinalization';
 
 import { ChevronRight, ChevronLeft, Save, AlertTriangle } from 'lucide-react';
 
-type ViewMode = 'dashboard' | 'projects' | 'wizard' | 'editor' | 'identity' | 'admin';
+type ViewMode = 'dashboard' | 'projects' | 'wizard' | 'editor' | 'identity' | 'admin' | 'account';
 
 const App: React.FC = () => {
     // Auth State
@@ -58,30 +60,60 @@ const App: React.FC = () => {
             setUser(basicUser);
 
             // 2. OPTIONAL: Fetch Role & Detailed Profile from DB
-            // If DB is down or row doesn't exist, this fails silently without blocking login.
             try {
                 if (!supabase) return;
 
-                const { data: profile, error } = await supabase
+                // Attempt 1: Fetch by Auth ID (Standard)
+                let { data: profile, error } = await supabase
                     .from('users')
                     .select('*')
                     .eq('id', sessionUser.id)
                     .maybeSingle();
 
-                if (error) {
-                    if (!error.message?.includes('relation') && !error.message?.includes('schema')) {
-                        console.warn("Profile fetch warning:", error.message);
+                // Attempt 2: Fetch by Email (Fallback with ID Repair)
+                // This handles cases where manual DB inserts have mismatched IDs
+                if (!profile && sessionUser.email) {
+                    const { data: profileByEmail } = await supabase
+                        .from('users')
+                        .select('*')
+                        .ilike('email', sessionUser.email) // Case insensitive lookup
+                        .maybeSingle();
+                    
+                    if (profileByEmail) {
+                        profile = profileByEmail;
+                        
+                        // SELF-HEALING: If ID mismatches, fix it in the DB immediately
+                        if (profile.id !== sessionUser.id) {
+                            console.log("Repairing User ID mismatch in database...");
+                            await supabase
+                                .from('users')
+                                .update({ id: sessionUser.id })
+                                .eq('email', sessionUser.email); // Match by unique email
+                        }
                     }
-                } else if (profile) {
+                }
+
+                if (profile) {
                     // Merge DB profile with Auth ID
                     setUser(prev => ({
                         ...basicUser, // Keep basic structure as fallback
                         ...profile, // Overwrites name/school/role from DB if exists
-                        id: sessionUser.id // Ensure ID remains from Auth
+                        id: sessionUser.id, // Ensure ID remains from Auth (Critical for RLS)
+                        force_password_change: basicUser.force_password_change // Keep auth metadata priority
                     }));
                 }
+
+                // 3. EMERGENCY OVERRIDE FOR OWNER
+                // Guarantees access even if DB fetch fails completely or RLS blocks it
+                if (sessionUser.email === 'alimkamcl@gmail.com') {
+                    setUser(prev => ({
+                        ...(prev || basicUser),
+                        role: 'admin'
+                    }));
+                }
+
             } catch (e) {
-                // Completely silent catch
+                console.error("Profile fetch error", e);
             }
         };
 
@@ -151,6 +183,7 @@ const App: React.FC = () => {
             else if (hash === 'wizard') setView('wizard');
             else if (hash === 'editor') setView('editor');
             else if (hash === 'settings') setView('identity');
+            else if (hash === 'account') setView('account');
             else {
                 setView('dashboard');
             }
@@ -159,7 +192,18 @@ const App: React.FC = () => {
         handleHashChange();
         window.addEventListener('hashchange', handleHashChange);
         return () => window.removeEventListener('hashchange', handleHashChange);
-    }, [user?.role]);
+    }, [user?.role]); 
+
+    // --- Admin Auto-Redirect Effect ---
+    useEffect(() => {
+        if (user?.role === 'admin') {
+            const hash = window.location.hash.replace('#/', '');
+            if (hash === '' || hash === '/' || hash === 'dashboard') {
+                setView('admin');
+                window.location.hash = '#/admin';
+            }
+        }
+    }, [user?.role]); 
 
     // Sync View to Hash
     useEffect(() => {
@@ -172,10 +216,9 @@ const App: React.FC = () => {
         else if (view === 'wizard') targetHash = 'wizard';
         else if (view === 'editor') targetHash = 'editor';
         else if (view === 'identity') targetHash = 'settings';
+        else if (view === 'account') targetHash = 'account';
 
         if (hash !== targetHash) {
-            // Use location.hash instead of history.pushState to support blob/iframe environments
-            // This avoids SecurityError in sandboxed executions
             window.location.hash = `/${targetHash}`;
         }
     }, [view, user]);
@@ -240,6 +283,16 @@ const App: React.FC = () => {
 
     if (!user) {
         return <Login onLogin={(u) => setUser(u)} />;
+    }
+
+    const handleForceChangeSuccess = () => {
+        if (user) {
+            setUser({ ...user, force_password_change: false });
+        }
+    };
+
+    if (user.force_password_change) {
+        return <ForcePasswordChange onSuccess={handleForceChangeSuccess} />;
     }
 
     const handleStartProject = () => {
@@ -329,6 +382,7 @@ const App: React.FC = () => {
     if (view === 'editor') headerTitle = "Document Editor";
     else if (view === 'projects') headerTitle = "Library & Projek";
     else if (view === 'identity') headerTitle = "Pengaturan Data Sekolah";
+    else if (view === 'account') headerTitle = "Pengaturan Akun";
     else if (view === 'admin') headerTitle = "Admin Dashboard";
     else if (view === 'wizard') headerTitle = STEPS[currentStep].title;
 
@@ -371,6 +425,8 @@ const App: React.FC = () => {
                     />}
                     
                     {view === 'identity' && <IdentitySettings project={project} onChange={updateProject} onSave={() => showNotify('Data Sekolah & Admin berhasil disimpan!', 'success')} />}
+
+                    {view === 'account' && <AccountSettings user={user} />}
 
                     {view === 'admin' && user.role === 'admin' && <AdminDashboard />}
 

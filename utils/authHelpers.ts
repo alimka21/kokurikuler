@@ -11,7 +11,8 @@ export const mapSessionToUser = (sessionUser: any): User => {
         email: sessionUser.email || '',
         name: meta.name || sessionUser.email?.split('@')[0] || 'Pengguna',
         school: meta.school || '',
-        role: 'user', // Default safe role to prevent undefined
-        is_registered: true
+        role: meta.role || 'user', // Ensure role comes from metadata if set there
+        is_registered: true,
+        force_password_change: meta.force_password_change || false
     };
 };

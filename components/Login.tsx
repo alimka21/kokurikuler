@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../services/supabaseClient';
-import { GraduationCap, Loader2, Lock, User, Building, Mail, Eye, EyeOff, LogIn, UserPlus } from 'lucide-react';
+import { GraduationCap, Loader2, Lock, Mail, Eye, EyeOff, LogIn, ExternalLink } from 'lucide-react';
 import Swal from 'sweetalert2';
 import { InputGroup } from './common/UiKit';
 import { mapSessionToUser } from '../utils/authHelpers';
@@ -11,22 +11,36 @@ interface LoginProps {
 }
 
 const Login: React.FC<LoginProps> = ({ onLogin }) => {
-    // Mode: Login vs Register
-    const [isLoginMode, setIsLoginMode] = useState(true);
-    
     // Form Data
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
-    const [name, setName] = useState('');
-    const [school, setSchool] = useState('');
     
     // UI State
     const [loading, setLoading] = useState(false);
     const [showPassword, setShowPassword] = useState(false);
+    const [subscriptionLink, setSubscriptionLink] = useState('https://s.id/alimkadigital/');
 
     // Mounted ref to prevent state updates on unmounted component
     const isMounted = useRef(true);
+    
     useEffect(() => {
+        const fetchSettings = async () => {
+            try {
+                const { data, error } = await supabase
+                    .from('system_settings')
+                    .select('value')
+                    .eq('key', 'subscription_url')
+                    .single();
+                
+                if (data && data.value) {
+                    setSubscriptionLink(data.value);
+                }
+            } catch (e) {
+                // Fallback silently to default
+            }
+        };
+        fetchSettings();
+
         return () => { isMounted.current = false; };
     }, []);
 
@@ -35,55 +49,27 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
         setLoading(true);
 
         try {
-            if (isLoginMode) {
-                // --- LOGIN FLOW ---
-                const { data, error } = await supabase.auth.signInWithPassword({
-                    email: email.trim(),
-                    password: password
+            // --- LOGIN FLOW ---
+            const { data, error } = await supabase.auth.signInWithPassword({
+                email: email.trim(),
+                password: password
+            });
+
+            if (error) throw error;
+
+            // Safe User Mapping
+            const safeUser = mapSessionToUser(data.user);
+            
+            if (isMounted.current) {
+                Swal.fire({
+                    icon: 'success',
+                    title: 'Berhasil Masuk',
+                    timer: 1000,
+                    showConfirmButton: false
                 });
 
-                if (error) throw error;
-
-                // Safe User Mapping
-                const safeUser = mapSessionToUser(data.user);
-                
-                if (isMounted.current) {
-                    Swal.fire({
-                        icon: 'success',
-                        title: 'Berhasil Masuk',
-                        timer: 1000,
-                        showConfirmButton: false
-                    });
-
-                    // Trigger parent update (this will unmount this component)
-                    onLogin(safeUser);
-                }
-
-            } else {
-                // --- SIGN UP FLOW ---
-                const { data, error } = await supabase.auth.signUp({
-                    email: email.trim(),
-                    password: password,
-                    options: {
-                        data: {
-                            name: name.trim(),
-                            school: school.trim(),
-                            role: 'user'
-                        }
-                    }
-                });
-
-                if (error) throw error;
-
-                if (data.user && isMounted.current) {
-                    Swal.fire({
-                        icon: 'success',
-                        title: 'Registrasi Berhasil!',
-                        text: 'Akun Anda telah dibuat. Silakan masuk.',
-                        confirmButtonText: 'Lanjut Login'
-                    });
-                    setIsLoginMode(true); 
-                }
+                // Trigger parent update (this will unmount this component)
+                onLogin(safeUser);
             }
 
         } catch (err: any) {
@@ -93,20 +79,16 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
             // Handle specific errors without polluting console for expected flows
             if (msg === "Invalid login credentials") {
                 msg = "Email atau kata sandi salah.";
-            } else if (lowerMsg.includes("already registered")) {
-                msg = "Email ini sudah terdaftar. Silakan login.";
             } else if (lowerMsg.includes("database error") || lowerMsg.includes("schema") || lowerMsg.includes("fetch")) {
-                // Suppress console error for known schema issues, just show UI alert
                 msg = "Sistem sedang pemeliharaan atau gangguan koneksi database. Silakan coba lagi nanti.";
             } else {
-                // Only log genuine unexpected errors
                 console.error("Auth Error:", err);
             }
             
             if (isMounted.current) {
                 Swal.fire({
                     icon: 'error',
-                    title: isLoginMode ? 'Gagal Masuk' : 'Gagal Daftar',
+                    title: 'Gagal Masuk',
                     text: msg,
                     confirmButtonColor: '#d33'
                 });
@@ -127,19 +109,12 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
                     </div>
                     <h1 className="text-2xl font-bold text-slate-900">Pakar Kokurikuler</h1>
                     <p className="text-slate-500 text-sm mt-1">
-                        {isLoginMode ? "Masuk untuk mengelola projek" : "Daftar akun baru"}
+                        Masuk untuk mengelola projek
                     </p>
                 </div>
 
                 <form onSubmit={handleAuth} className="space-y-4">
                     
-                    {!isLoginMode && (
-                        <div className="space-y-4 animate-in slide-in-from-top-4 duration-300">
-                            <InputGroup label="Nama Lengkap" icon={User} value={name} onChange={setName} placeholder="Nama Guru" />
-                            <InputGroup label="Asal Sekolah" icon={Building} value={school} onChange={setSchool} placeholder="Nama Sekolah" />
-                        </div>
-                    )}
-
                     <InputGroup label="Email" icon={Mail} value={email} onChange={setEmail} placeholder="nama@sekolah.id">
                          <input 
                             type="email" 
@@ -177,34 +152,29 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
                     >
                         {loading ? (
                             <Loader2 className="w-5 h-5 animate-spin" />
-                        ) : isLoginMode ? (
-                            <>Masuk <LogIn className="w-5 h-5" /></>
                         ) : (
-                            <>Daftar Sekarang <UserPlus className="w-5 h-5" /></>
+                            <>Masuk <LogIn className="w-5 h-5" /></>
                         )}
                     </button>
                 </form>
 
-                <div className="mt-6 pt-6 border-t border-slate-100 text-center">
-                    <p className="text-sm text-slate-500 mb-2">
-                        {isLoginMode ? "Belum punya akun?" : "Sudah punya akun?"}
+                <div className="mt-8 pt-6 border-t border-slate-100 text-center">
+                    <p className="text-sm text-slate-500 mb-3">
+                        Belum memiliki akun?
                     </p>
-                    <button 
-                        type="button"
-                        onClick={() => {
-                            setIsLoginMode(!isLoginMode);
-                            setEmail('');
-                            setPassword('');
-                        }}
-                        className="text-primary font-bold hover:underline transition-all"
+                    <a 
+                        href={subscriptionLink}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="block w-full py-3 bg-emerald-50 text-emerald-600 rounded-xl font-bold hover:bg-emerald-100 transition-all border border-emerald-100 flex items-center justify-center gap-2"
                     >
-                        {isLoginMode ? "Buat Akun Baru" : "Masuk ke Akun Saya"}
-                    </button>
+                        Klik Untuk Langganan <ExternalLink className="w-4 h-4" />
+                    </a>
                 </div>
                 
                 <div className="mt-8 text-center">
                     <p className="text-[10px] text-slate-300">
-                        Sistem Informasi Kokurikuler v1.4.2<br/>
+                        Sistem Informasi Kokurikuler v1.5.0<br/>
                         Powered by Supabase Auth
                     </p>
                 </div>
