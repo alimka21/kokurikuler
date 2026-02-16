@@ -20,9 +20,9 @@ const getEnv = (key: string) => {
     return '';
 };
 
-// Use fallback values if environment variables are missing to prevent "supabaseUrl is required" crash
-const supabaseUrl = getEnv('VITE_SUPABASE_URL') || 'https://placeholder.supabase.co';
-const supabaseKey = getEnv('VITE_SUPABASE_ANON_KEY') || 'placeholder-key';
+// Use provided credentials as fallback if .env is missing
+const supabaseUrl = getEnv('VITE_SUPABASE_URL') || 'https://zmtpnmjkakwisjydykfw.supabase.co';
+const supabaseKey = getEnv('VITE_SUPABASE_ANON_KEY') || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InptdHBubWprYWt3aXNqeWR5a2Z3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzExOTA1OTAsImV4cCI6MjA4Njc2NjU5MH0.oC0sm654Knye8aUZYVp48zwMJ76gjNEb_caIkOcbEVQ';
 
 if (supabaseUrl === 'https://placeholder.supabase.co') {
   console.warn("Supabase URL or Key is missing. Database features will not work.");

@@ -1,9 +1,10 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { STEPS } from './constants';
 import { useProjectWizard } from './hooks/useProjectWizard';
 import { NotificationToast, NotificationType } from './components/common/UiKit';
 import { User } from './types';
+import { supabase } from './services/supabaseClient';
 
 // View Components
 import Dashboard from './components/Dashboard';
@@ -33,6 +34,7 @@ type ViewMode = 'dashboard' | 'projects' | 'wizard' | 'editor' | 'identity' | 'a
 const App: React.FC = () => {
     // Auth State
     const [user, setUser] = useState<User | null>(null);
+    const [isLoadingUser, setIsLoadingUser] = useState(true);
 
     const [view, setView] = useState<ViewMode>('dashboard');
     const [isSidebarOpen, setSidebarOpen] = useState(false);
@@ -42,6 +44,75 @@ const App: React.FC = () => {
 
     const showNotify = (msg: string, type: NotificationType = 'success') => {
         setToast({ show: true, msg, type });
+    };
+
+    // --- Auth Logic ---
+    useEffect(() => {
+        // 1. Check active session on mount
+        const checkSession = async () => {
+            try {
+                const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+                
+                if (sessionError) {
+                    throw sessionError;
+                }
+
+                if (session?.user?.email) {
+                    // Fetch user details from public.users whitelist
+                    // Normalize email to lower case to match Login logic
+                    const emailToFind = session.user.email.toLowerCase();
+
+                    const { data: profile, error: profileError } = await supabase
+                        .from('users')
+                        .select('*')
+                        .eq('email', emailToFind)
+                        .maybeSingle();
+                    
+                    if (profileError) {
+                        // Warn only, don't crash. This happens if table is missing or RLS blocks it.
+                        console.warn("Profile fetch warning (Check DB/RLS):", profileError.message);
+                    } else if (profile) {
+                        setUser({ ...profile, id: session.user.id });
+                    } else {
+                        // Session exists but no profile found in public.users
+                        console.warn("User authenticated but no profile found in whitelist.");
+                    }
+                }
+            } catch (err) {
+                console.error("Auth initialization error:", err);
+            } finally {
+                setIsLoadingUser(false);
+            }
+        };
+        checkSession();
+
+        // 2. Listen for Auth Changes (Sign In, Sign Out)
+        const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+             if (event === 'SIGNED_OUT') {
+                 setUser(null);
+                 setView('dashboard');
+             } else if (event === 'SIGNED_IN' && session?.user.email) {
+                 // Refresh user data on sign in
+                 const emailToFind = session.user.email.toLowerCase();
+                 
+                 const { data: profile } = await supabase
+                    .from('users')
+                    .select('*')
+                    .eq('email', emailToFind)
+                    .maybeSingle();
+                 
+                 if (profile) {
+                     setUser({ ...profile, id: session.user.id });
+                 }
+             }
+        });
+
+        return () => subscription.unsubscribe();
+    }, []);
+
+    const handleLogout = async () => {
+        await supabase.auth.signOut();
+        // User state will be cleared by onAuthStateChange
     };
 
     // Use Custom Hook for Logic (Pass user context)
@@ -69,6 +140,17 @@ const App: React.FC = () => {
         exportDocx,
         exportAnnualDocx
     } = useProjectWizard(user);
+
+    if (isLoadingUser) {
+        return (
+            <div className="min-h-screen flex items-center justify-center bg-slate-50">
+                <div className="animate-pulse flex flex-col items-center">
+                    <div className="w-12 h-12 bg-slate-200 rounded-full mb-4"></div>
+                    <div className="h-4 w-32 bg-slate-200 rounded"></div>
+                </div>
+            </div>
+        );
+    }
 
     // Render Login if not authenticated
     if (!user) {
@@ -189,6 +271,7 @@ const App: React.FC = () => {
                 user={user}
                 projectData={project}
                 onEditIdentity={() => setView('identity')}
+                onLogout={handleLogout}
             />
 
             <main className="flex-1 flex flex-col h-screen overflow-hidden relative">

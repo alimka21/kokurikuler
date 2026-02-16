@@ -1,6 +1,6 @@
 
 import React, { useMemo } from 'react';
-import { GraduationCap, LayoutDashboard, FolderOpen, CheckCircle2, Settings, ShieldCheck } from 'lucide-react';
+import { GraduationCap, LayoutDashboard, FolderOpen, CheckCircle2, Settings, ShieldCheck, LogOut } from 'lucide-react';
 import { STEPS } from '../../constants';
 import { ProjectState, User } from '../../types';
 
@@ -13,9 +13,10 @@ interface SidebarProps {
     user: User;
     projectData?: ProjectState;
     onEditIdentity: () => void; 
+    onLogout: () => void; // Added Prop
 }
 
-const Sidebar: React.FC<SidebarProps> = ({ isOpen, currentView, onChangeView, currentStep, onStepClick, user, onEditIdentity }) => {
+const Sidebar: React.FC<SidebarProps> = ({ isOpen, currentView, onChangeView, currentStep, onStepClick, user, onEditIdentity, onLogout }) => {
     
     // Calculate progress percentage
     const progress = useMemo(() => {
@@ -102,18 +103,26 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, currentView, onChangeView, cu
 
             {/* Footer User Profile */}
             <div className="p-6 border-t border-slate-100 bg-slate-50/50">
-                <div className="flex items-center gap-3">
-                    <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-sm shadow-sm ${user.role === 'admin' ? 'bg-purple-600' : 'bg-slate-400'}`}>
-                        {user.name ? user.name.charAt(0) : 'U'}
-                    </div>
-                    <div className="overflow-hidden">
-                        <div className="flex items-center gap-1">
-                            <p className="text-sm font-bold text-slate-900 truncate">{user.name || 'User'}</p>
-                            {user.role === 'admin' && <ShieldCheck className="w-3 h-3 text-purple-600" />}
+                <div className="flex items-center justify-between mb-3">
+                     <div className="flex items-center gap-3">
+                        <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-sm shadow-sm ${user.role === 'admin' ? 'bg-purple-600' : 'bg-slate-400'}`}>
+                            {user.name ? user.name.charAt(0) : 'U'}
                         </div>
-                        <p className="text-xs text-slate-500 truncate">{user.school || 'School Name'}</p>
+                        <div className="overflow-hidden">
+                            <div className="flex items-center gap-1">
+                                <p className="text-sm font-bold text-slate-900 truncate max-w-[120px]">{user.name || 'User'}</p>
+                                {user.role === 'admin' && <ShieldCheck className="w-3 h-3 text-purple-600" />}
+                            </div>
+                            <p className="text-xs text-slate-500 truncate max-w-[120px]">{user.school || 'School Name'}</p>
+                        </div>
                     </div>
                 </div>
+                <button 
+                    onClick={onLogout}
+                    className="w-full flex items-center justify-center gap-2 px-3 py-2 text-xs font-bold text-slate-500 bg-white border border-slate-200 rounded-lg hover:text-red-600 hover:bg-red-50 hover:border-red-100 transition-all"
+                >
+                    <LogOut className="w-3.5 h-3.5" /> Keluar
+                </button>
             </div>
         </aside>
     );

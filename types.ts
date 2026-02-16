@@ -1,5 +1,4 @@
 
-
 export enum Dimension {
   FAITH = "Keimanan dan Ketakwaan kepada Tuhan YME",
   GLOBAL_CITIZEN = "Kewargaan (Global/Lokal)",
@@ -17,6 +16,7 @@ export interface User {
   name: string;
   school: string;
   role: 'admin' | 'user';
+  is_registered?: boolean; // New flag to check if user has set up their account
   created_at?: string;
 }
 
