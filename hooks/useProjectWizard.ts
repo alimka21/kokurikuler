@@ -1,28 +1,55 @@
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { ProjectState, INITIAL_PROJECT_STATE, AnalysisItem } from '../types';
 import * as Gemini from '../services/geminiService';
 import { generateAndDownloadDocx, generateAnnualProgramDocx } from '../utils/docxGenerator';
 import { STEPS } from '../constants';
 import Swal from 'sweetalert2';
 import { supabase } from '../services/supabaseClient';
+import { saveDraft, loadDraft } from '../utils/sessionManager';
 
 export const useProjectWizard = (user: any) => {
     // Current active project being edited
-    const [project, setProject] = useState<ProjectState>(() => ({
-        ...INITIAL_PROJECT_STATE,
-        id: crypto.randomUUID(), // Initialize with UUID immediately
-        // Pre-fill user data if available
-        schoolName: user?.school || '',
-        coordinatorName: user?.name || ''
-    }));
+    const [project, setProject] = useState<ProjectState>(() => {
+        // STATE HYDRATION: Check local storage for draft first
+        const savedDraft = loadDraft('current_project');
+        if (savedDraft) return savedDraft;
+
+        return {
+            ...INITIAL_PROJECT_STATE,
+            id: crypto.randomUUID(), 
+            schoolName: user?.school || '',
+            coordinatorName: user?.name || ''
+        };
+    });
 
     // List of all saved projects
     const [savedProjects, setSavedProjects] = useState<ProjectState[]>([]);
     
-    const [currentStep, setCurrentStep] = useState(0);
+    // Check local storage for step
+    const [currentStep, setCurrentStep] = useState(() => {
+        const savedStep = loadDraft('current_step');
+        return typeof savedStep === 'number' ? savedStep : 0;
+    });
+
     const [loadingAI, setLoadingAI] = useState(false);
     const [isFinalizing, setIsFinalizing] = useState(false);
+    const isFirstRun = useRef(true);
+
+    // --- AUTO SAVE DRAFT LOCALLY ---
+    useEffect(() => {
+        if (isFirstRun.current) {
+            isFirstRun.current = false;
+            return;
+        }
+        const handler = setTimeout(() => {
+            saveDraft('current_project', project);
+            saveDraft('current_step', currentStep);
+        }, 1000); // Debounce saves
+
+        return () => clearTimeout(handler);
+    }, [project, currentStep]);
+
 
     // --- SUPABASE INTEGRATION ---
     useEffect(() => {
@@ -40,23 +67,20 @@ export const useProjectWizard = (user: any) => {
                 .order('updated_at', { ascending: false });
 
             if (error) {
-                // Ignore missing table error (code 42P01) or other schema issues
                 if (error.code === '42P01' || error.message.includes('relation') || error.message.includes('schema')) {
                     setSavedProjects([]);
                     return;
                 }
-                console.warn("Fetch projects error:", error.message);
                 return;
             }
 
             if (data) {
                 const mappedProjects = data.map((d: any) => {
-                    // Fallback if content is null (legacy data)
                     const content = d.content || {};
                     return {
-                        ...INITIAL_PROJECT_STATE, // Ensure defaults
+                        ...INITIAL_PROJECT_STATE, 
                         ...content,
-                        id: d.id, // Database ID is source of truth
+                        id: d.id, 
                     };
                 });
                 setSavedProjects(mappedProjects);
@@ -67,21 +91,12 @@ export const useProjectWizard = (user: any) => {
     };
 
     const persistToSupabase = async (proj: ProjectState) => {
-        // Skip sync in emergency mode
-        if (user.id === 'emergency-admin-id') {
-            console.warn("Cloud sync disabled in Emergency Admin Mode");
-            return;
-        }
+        if (user.id === 'emergency-admin-id') return;
 
-        // Prepare Payload: Hybrid Approach
-        // 1. Relational Columns (for Indexing/Filtering)
-        // 2. JSONB 'content' (for Full App State)
         const payload = {
             id: proj.id,
-            user_id: user.id, // Foreign Key link
-            user_email: user.email, // Redundant but useful for quick checks
-            
-            // Metadata for Dashboard Querying
+            user_id: user.id, 
+            user_email: user.email, 
             title: proj.title,
             school_name: proj.schoolName,
             phase: proj.phase,
@@ -91,28 +106,14 @@ export const useProjectWizard = (user: any) => {
             selected_theme: proj.selectedTheme,
             activity_format: proj.activityFormat,
             analysis_summary: proj.analysisSummary,
-            
-            // Complex Data stored as JSONB
             content: proj,
-            
             updated_at: new Date().toISOString()
         };
 
-        const { error } = await supabase
-            .from('projects')
-            .upsert(payload);
+        const { error } = await supabase.from('projects').upsert(payload);
 
-        if (error) {
-            // Suppress schema errors if table doesn't exist yet
-            if (error.code === '42P01' || error.message.includes('relation')) {
-                // Do not show error alert to user, they can just use local state
-                console.warn("Cloud sync failed: Projects table missing.");
-            } else {
-                console.error("Error saving to Supabase", error);
-                Swal.fire('Error', 'Gagal menyimpan ke cloud. Periksa koneksi internet.', 'error');
-            }
-        } else {
-            fetchProjects(); // Refresh list to get server timestamp/consistency
+        if (!error) {
+            fetchProjects(); 
         }
     };
 
@@ -120,20 +121,17 @@ export const useProjectWizard = (user: any) => {
         setProject(prev => ({ ...prev, [field]: value }));
     };
 
-    // --- Data Management Functions ---
-
-    // 1. Save Project to List & Cloud
     const saveProject = async () => {
         const updatedProject = { ...project, lastUpdated: Date.now() };
         
-        // Optimistic update locally
         setSavedProjects(prev => {
             const others = prev.filter(p => p.id !== project.id);
             return [...others, updatedProject];
         });
 
-        // Save to DB
         await persistToSupabase(updatedProject);
+        // Clear draft after successful save, but keep project loaded
+        // saveDraft('current_project', null); 
 
         Swal.fire({
             icon: 'success',
@@ -144,33 +142,35 @@ export const useProjectWizard = (user: any) => {
         });
     };
 
-    // 2. Create New Project
     const createNewProject = () => {
-        setProject(prev => ({
+        const newP = {
             ...INITIAL_PROJECT_STATE,
-            id: crypto.randomUUID(), // Generate new UUID
-            schoolName: user?.school || prev.schoolName,
-            coordinatorName: user?.name || prev.coordinatorName,
-            coordinatorNip: prev.coordinatorNip,
-            principalName: prev.principalName,
-            principalNip: prev.principalNip,
-            signaturePlace: prev.signaturePlace,
-            contextAnalysis: prev.contextAnalysis,
-            analysisSummary: prev.analysisSummary
-        }));
+            id: crypto.randomUUID(),
+            schoolName: user?.school || project.schoolName,
+            coordinatorName: user?.name || project.coordinatorName,
+            coordinatorNip: project.coordinatorNip,
+            principalName: project.principalName,
+            principalNip: project.principalNip,
+            signaturePlace: project.signaturePlace,
+            contextAnalysis: project.contextAnalysis,
+            analysisSummary: project.analysisSummary
+        };
+        setProject(newP);
         setCurrentStep(0);
+        saveDraft('current_project', newP);
+        saveDraft('current_step', 0);
     };
 
-    // 3. Load Project
     const loadProject = (id: string) => {
         const found = savedProjects.find(p => p.id === id);
         if (found) {
             setProject(found);
             setCurrentStep(0); 
+            saveDraft('current_project', found);
+            saveDraft('current_step', 0);
         }
     };
 
-    // 4. Duplicate Project
     const duplicateProject = async (id: string, newClass: string, newPhase: string) => {
         const original = savedProjects.find(p => p.id === id);
         if (original) {
@@ -182,22 +182,17 @@ export const useProjectWizard = (user: any) => {
                 phase: newPhase,
                 lastUpdated: Date.now(),
             };
-            
-            // Persist duplicate
             await persistToSupabase(newProject);
-            
             Swal.fire('Duplikasi Berhasil', `Projek disalin ke ${newClass}`, 'success');
         }
     };
 
-    // 5. Get projects for Annual Program (Same Class)
     const getProjectsForClass = (targetClass: string) => {
         return savedProjects.filter(p => p.targetClass === targetClass);
     };
 
-
     // --- Validation Helper ---
-    const checkPrerequisites = (action: 'next' | 'analyze' | 'dimensions' | 'theme' | 'ideas' | 'goals' | 'activities') => {
+    const checkPrerequisites = (action: string) => {
         const showError = (text: string) => {
             Swal.fire({
                 icon: 'warning',
@@ -269,7 +264,6 @@ export const useProjectWizard = (user: any) => {
                 title: 'Batas Kuota Tercapai (Limit)',
                 text: 'Maaf, kuota penggunaan AI (Gemini API) hari ini telah habis. Silakan coba lagi besok atau gunakan API Key lain.',
                 confirmButtonColor: '#2563EB',
-                footer: '<a href="https://aistudio.google.com/app/apikey" target="_blank" style="color: #2563EB; font-weight: bold;">Cek Google AI Studio</a>'
             });
         } else if (msg === "INVALID_API_KEY") {
              Swal.fire({
@@ -309,12 +303,7 @@ export const useProjectWizard = (user: any) => {
     const goToStep = (stepIndex: number) => {
         if (stepIndex > currentStep) {
              if (stepIndex > currentStep + 1) {
-                 Swal.fire({
-                    icon: 'error',
-                    title: 'Akses Ditolak',
-                    text: '⚠️ Anda tidak bisa melompati tahapan. Harap selesaikan secara berurutan.',
-                    confirmButtonColor: '#2563EB'
-                 });
+                 Swal.fire({ icon: 'error', title: 'Akses Ditolak', text: '⚠️ Anda tidak bisa melompati tahapan.', confirmButtonColor: '#2563EB' });
                  return;
              }
              if (!checkPrerequisites('next')) return;
@@ -322,8 +311,7 @@ export const useProjectWizard = (user: any) => {
         setCurrentStep(stepIndex);
     }
 
-    // --- AI Actions ---
-
+    // --- AI Actions Wrappers (Same as before) ---
     const runAnalysis = async () => {
         if (!checkPrerequisites('analyze')) return;
         setLoadingAI(true);
@@ -334,18 +322,11 @@ export const useProjectWizard = (user: any) => {
               if (item.custom) parts.push(`(Lainnya: ${item.custom})`);
               return parts.length > 0 ? parts.join(", ") : "-";
             };
-            const promptText = `
-            [1. Kurikulum] Potensi: ${fmt(d.curriculum.goals)}, Gap: ${fmt(d.curriculum.gaps)}, Nilai: ${fmt(d.curriculum.values)}
-            [2. Murid] Minat: ${fmt(d.students.interests)}, Bakat: ${fmt(d.students.talents)}, Kebutuhan: ${fmt(d.students.needs)}
-            [3. Sumber Daya] Fisik: ${fmt(d.resources.assets)}, SDM: ${fmt(d.resources.people)}, Keuangan: ${fmt(d.resources.finance)}, Mitra: ${fmt(d.resources.partners)}
-            [4. Sosial] Isu: ${fmt(d.social.issues)}, Nilai: ${fmt(d.social.values)}, Eko: ${fmt(d.social.socioeco)}
-            `;
+            const promptText = `[1. Kurikulum] Potensi: ${fmt(d.curriculum.goals)}, Gap: ${fmt(d.curriculum.gaps)}, Nilai: ${fmt(d.curriculum.values)} [2. Murid] Minat: ${fmt(d.students.interests)}, Bakat: ${fmt(d.students.talents)}, Kebutuhan: ${fmt(d.students.needs)} [3. Sumber Daya] Fisik: ${fmt(d.resources.assets)}, SDM: ${fmt(d.resources.people)}, Keuangan: ${fmt(d.resources.finance)}, Mitra: ${fmt(d.resources.partners)} [4. Sosial] Isu: ${fmt(d.social.issues)}, Nilai: ${fmt(d.social.values)}, Eko: ${fmt(d.social.socioeco)}`;
             const summary = await Gemini.analyzeSchoolContext(promptText);
             updateProject('analysisSummary', summary);
             setLoadingAI(false);
-        } catch (e) {
-            handleAIError(e);
-        }
+        } catch (e) { handleAIError(e); }
     };
 
     const runThemeRecommend = async () => {
@@ -355,9 +336,7 @@ export const useProjectWizard = (user: any) => {
             const themes = await Gemini.recommendThemes(project.analysisSummary, project.selectedDimensions);
             updateProject('themeOptions', themes);
             setLoadingAI(false);
-        } catch(e) {
-            handleAIError(e);
-        }
+        } catch(e) { handleAIError(e); }
     };
 
     const runCreativeIdeaGen = async () => {
@@ -365,21 +344,9 @@ export const useProjectWizard = (user: any) => {
         setLoadingAI(true);
         try {
             const ideas = await Gemini.generateCreativeIdeas(project.selectedTheme, project.activityFormat, project.analysisSummary);
-            
-            if (ideas.length === 0) {
-                 Swal.fire({
-                    icon: 'error',
-                    title: 'Gagal',
-                    text: 'AI tidak berhasil membuat ide. Silakan coba lagi atau cek koneksi internet.',
-                    confirmButtonColor: '#2563EB'
-                });
-            } else {
-                updateProject('creativeIdeas', ideas);
-            }
+            if (ideas.length === 0) { Swal.fire({ icon: 'error', title: 'Gagal', text: 'AI tidak berhasil membuat ide.', confirmButtonColor: '#2563EB' }); } else { updateProject('creativeIdeas', ideas); }
             setLoadingAI(false);
-        } catch (e) {
-             handleAIError(e);
-        }
+        } catch (e) { handleAIError(e); }
     };
 
     const runGoalDraft = async () => {
@@ -389,9 +356,7 @@ export const useProjectWizard = (user: any) => {
             const goal = await Gemini.draftProjectGoals(project.selectedTheme, project.selectedDimensions, project.activityFormat);
             updateProject('projectGoals', goal);
             setLoadingAI(false);
-        } catch (e) {
-            handleAIError(e);
-        }
+        } catch (e) { handleAIError(e); }
     };
 
     const runActivityPlan = async () => {
@@ -401,9 +366,7 @@ export const useProjectWizard = (user: any) => {
             const acts = await Gemini.generateActivityPlan(project.projectJpAllocation, project.selectedTheme, project.projectGoals, project.activityFormat);
             updateProject('activities', acts);
             setLoadingAI(false);
-        } catch (e) {
-            handleAIError(e);
-        }
+        } catch (e) { handleAIError(e); }
     };
 
     const runFinalization = async () => {
@@ -412,43 +375,15 @@ export const useProjectWizard = (user: any) => {
             const hiddenData = await Gemini.generateHiddenSections(project);
             setProject(prev => ({ ...prev, ...hiddenData }));
             setIsFinalizing(false);
-        } catch (e) {
-            handleAIError(e);
-        }
+        } catch (e) { handleAIError(e); }
     };
 
-    const exportDocx = async () => {
-        await generateAndDownloadDocx(project);
-    };
-
-    const exportAnnualDocx = async () => {
-        // Pass current project + all saved projects that match the class
-        const classmates = getProjectsForClass(project.targetClass);
-        await generateAnnualProgramDocx(project, classmates);
-    };
+    const exportDocx = async () => { await generateAndDownloadDocx(project); };
+    const exportAnnualDocx = async () => { const classmates = getProjectsForClass(project.targetClass); await generateAnnualProgramDocx(project, classmates); };
 
     return {
-        project,
-        savedProjects, // Exported list
-        updateProject,
-        currentStep,
-        nextStep,
-        prevStep,
-        goToStep,
-        loadingAI,
-        isFinalizing,
-        // Actions
-        saveProject,
-        createNewProject,
-        loadProject,
-        duplicateProject,
-        runAnalysis,
-        runThemeRecommend,
-        runCreativeIdeaGen,
-        runGoalDraft,
-        runActivityPlan,
-        runFinalization,
-        exportDocx,
-        exportAnnualDocx
+        project, savedProjects, updateProject, currentStep, nextStep, prevStep, goToStep, loadingAI, isFinalizing,
+        saveProject, createNewProject, loadProject, duplicateProject, runAnalysis, runThemeRecommend, runCreativeIdeaGen,
+        runGoalDraft, runActivityPlan, runFinalization, exportDocx, exportAnnualDocx
     };
 };

@@ -1,21 +1,22 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { STEPS } from './constants';
 import { useProjectWizard } from './hooks/useProjectWizard';
 import { NotificationToast, NotificationType } from './components/common/UiKit';
 import { User } from './types';
 import { supabase } from './services/supabaseClient';
 import { mapSessionToUser } from './utils/authHelpers';
+import { saveSessionToCache, restoreSessionFromCache, clearSessionCache } from './utils/sessionManager';
 
 // View Components
 import Dashboard from './components/Dashboard';
 import MyProjects from './components/MyProjects';
 import Editor from './components/Editor';
 import IdentitySettings from './components/IdentitySettings';
-import AccountSettings from './components/AccountSettings'; // New
+import AccountSettings from './components/AccountSettings'; 
 import AdminDashboard from './components/AdminDashboard'; 
 import Login from './components/Login'; 
-import ForcePasswordChange from './components/ForcePasswordChange'; // New
+import ForcePasswordChange from './components/ForcePasswordChange'; 
 
 // Layout
 import Sidebar from './components/layout/Sidebar';
@@ -30,7 +31,7 @@ import StepGoals from './components/wizard/StepGoals';
 import StepActivityPlanning from './components/wizard/StepActivityPlanning';
 import StepFinalization from './components/wizard/StepFinalization';
 
-import { ChevronRight, ChevronLeft, Save, AlertTriangle } from 'lucide-react';
+import { ChevronRight, ChevronLeft, Save, AlertTriangle, WifiOff } from 'lucide-react';
 
 type ViewMode = 'dashboard' | 'projects' | 'wizard' | 'editor' | 'identity' | 'admin' | 'account';
 
@@ -39,6 +40,7 @@ const App: React.FC = () => {
     const [user, setUser] = useState<User | null>(null);
     const [isLoadingUser, setIsLoadingUser] = useState(true);
     const [connectionError, setConnectionError] = useState<string | null>(null);
+    const [isOffline, setIsOffline] = useState(!navigator.onLine);
 
     // App State
     const [view, setView] = useState<ViewMode>('dashboard');
@@ -49,99 +51,111 @@ const App: React.FC = () => {
         setToast({ show: true, msg, type });
     };
 
-    // --- AUTH ARCHITECTURE ---
+    // --- ARCHITECTURE: Offline Detection ---
     useEffect(() => {
-        // Helper to construct user object from session + optional db profile
-        const constructUser = async (sessionUser: any) => {
-            // 1. Construct Basic User safely using helper
+        const handleOnline = () => { setIsOffline(false); showNotify("Koneksi Internet Kembali", "success"); };
+        const handleOffline = () => { setIsOffline(true); };
+        
+        window.addEventListener('online', handleOnline);
+        window.addEventListener('offline', handleOffline);
+        return () => {
+            window.removeEventListener('online', handleOnline);
+            window.removeEventListener('offline', handleOffline);
+        };
+    }, []);
+
+    // --- ARCHITECTURE: Robust Session Handling ---
+    useEffect(() => {
+        let mounted = true;
+
+        // 1. LAZY LOAD: Try to load from local cache first (Instant Render)
+        const cachedUser = restoreSessionFromCache();
+        if (cachedUser) {
+            setUser(cachedUser);
+            setIsLoadingUser(false); // Immediate UI interactive
+        }
+
+        // Helper to construct and sync user
+        const fetchAndSyncUser = async (sessionUser: any) => {
             const basicUser = mapSessionToUser(sessionUser);
+            
+            // If we have no cache, show basic user immediately
+            if (!cachedUser) setUser(basicUser);
 
-            // Set immediately so UI loads fast with safe data
-            setUser(basicUser);
-
-            // 2. OPTIONAL: Fetch Role & Detailed Profile from DB
             try {
                 if (!supabase) return;
 
-                // Attempt 1: Fetch by Auth ID (Standard)
+                // Attempt 1: Fetch by Auth ID
                 let { data: profile, error } = await supabase
                     .from('users')
                     .select('*')
                     .eq('id', sessionUser.id)
                     .maybeSingle();
 
-                // Attempt 2: Fetch by Email (Fallback with ID Repair)
-                // This handles cases where manual DB inserts have mismatched IDs
+                // Attempt 2: Fetch by Email (Self-Healing)
                 if (!profile && sessionUser.email) {
                     const { data: profileByEmail } = await supabase
                         .from('users')
                         .select('*')
-                        .ilike('email', sessionUser.email) // Case insensitive lookup
+                        .ilike('email', sessionUser.email)
                         .maybeSingle();
                     
                     if (profileByEmail) {
                         profile = profileByEmail;
-                        
-                        // SELF-HEALING: If ID mismatches, fix it in the DB immediately
+                        // Auto-fix ID mismatch
                         if (profile.id !== sessionUser.id) {
-                            console.log("Repairing User ID mismatch in database...");
-                            await supabase
-                                .from('users')
-                                .update({ id: sessionUser.id })
-                                .eq('email', sessionUser.email); // Match by unique email
+                            await supabase.from('users').update({ id: sessionUser.id }).eq('email', sessionUser.email);
                         }
                     }
                 }
 
-                if (profile) {
-                    // Merge DB profile with Auth ID
-                    setUser(prev => ({
-                        ...basicUser, // Keep basic structure as fallback
-                        ...profile, // Overwrites name/school/role from DB if exists
-                        id: sessionUser.id, // Ensure ID remains from Auth (Critical for RLS)
-                        force_password_change: basicUser.force_password_change // Keep auth metadata priority
-                    }));
-                }
-
-                // 3. EMERGENCY OVERRIDE FOR OWNER
-                // Guarantees access even if DB fetch fails completely or RLS blocks it
+                // 3. EMERGENCY OVERRIDE
                 if (sessionUser.email === 'alimkamcl@gmail.com') {
-                    setUser(prev => ({
-                        ...(prev || basicUser),
-                        role: 'admin'
-                    }));
+                    if (!profile) profile = { ...basicUser };
+                    profile.role = 'admin';
                 }
 
+                if (mounted && profile) {
+                    const fullUser = {
+                        ...basicUser,
+                        ...profile,
+                        id: sessionUser.id,
+                        force_password_change: basicUser.force_password_change 
+                    };
+                    
+                    setUser(fullUser);
+                    saveSessionToCache(fullUser); // Update Cache
+                }
             } catch (e) {
-                console.error("Profile fetch error", e);
+                console.error("Profile sync silent fail", e);
             }
         };
 
         const initAuth = async () => {
-            setIsLoadingUser(true);
+            // Only show loader if no cache
+            if (!cachedUser) setIsLoadingUser(true);
             setConnectionError(null);
+            
             try {
                 const { data: { session }, error } = await supabase.auth.getSession();
-                
                 if (error) throw error;
                 
                 if (session?.user) {
-                    await constructUser(session.user);
+                    await fetchAndSyncUser(session.user);
                 } else {
                     setUser(null);
+                    clearSessionCache();
                 }
             } catch (e: any) {
-                console.error("Auth init error:", e);
-                let msg = e.message || "Gagal memuat sistem.";
-                if (msg === "Failed to fetch" || msg.includes("NetworkError")) {
-                    msg = "Gagal terhubung ke Database. Mohon periksa koneksi internet.";
-                } else if (msg.includes("API Key") || (e.status && (e.status === 400 || e.status === 401))) {
-                    msg = "Kunci Akses Database tidak valid atau kadaluarsa.";
+                console.error("Auth Error:", e);
+                // If offline and have cache, don't error out
+                if (!cachedUser) {
+                    let msg = e.message || "Gagal memuat sistem.";
+                    if (msg.includes("NetworkError")) msg = "Koneksi Bermasalah.";
+                    setConnectionError(msg);
                 }
-                setConnectionError(msg);
-                setUser(null);
             } finally {
-                setIsLoadingUser(false);
+                if (mounted) setIsLoadingUser(false);
             }
         };
 
@@ -149,23 +163,28 @@ const App: React.FC = () => {
 
         const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
              if (event === 'SIGNED_IN' && session?.user) {
-                 await constructUser(session.user);
+                 await fetchAndSyncUser(session.user);
              } else if (event === 'SIGNED_OUT') {
                  setUser(null);
+                 clearSessionCache();
                  window.location.hash = '';
              }
         });
 
-        return () => subscription.unsubscribe();
+        return () => {
+            mounted = false;
+            subscription.unsubscribe();
+        };
     }, []);
 
     const handleLogout = async () => {
+        clearSessionCache(); // Clear cache immediately
         await supabase.auth.signOut();
         setView('dashboard');
         setUser(null);
     };
 
-    // --- Routing Logic (Hash based) ---
+    // --- Routing Logic ---
     useEffect(() => {
         if (!user) return;
 
@@ -192,17 +211,6 @@ const App: React.FC = () => {
         handleHashChange();
         window.addEventListener('hashchange', handleHashChange);
         return () => window.removeEventListener('hashchange', handleHashChange);
-    }, [user?.role]); 
-
-    // --- Admin Auto-Redirect Effect ---
-    useEffect(() => {
-        if (user?.role === 'admin') {
-            const hash = window.location.hash.replace('#/', '');
-            if (hash === '' || hash === '/' || hash === 'dashboard') {
-                setView('admin');
-                window.location.hash = '#/admin';
-            }
-        }
     }, [user?.role]); 
 
     // Sync View to Hash
@@ -253,13 +261,13 @@ const App: React.FC = () => {
                 <div className="animate-pulse flex flex-col items-center">
                     <div className="w-12 h-12 bg-slate-200 rounded-full mb-4"></div>
                     <div className="h-4 w-32 bg-slate-200 rounded"></div>
-                    <p className="text-xs text-slate-400 mt-2">Menghubungkan ke Sistem...</p>
+                    <p className="text-xs text-slate-400 mt-2">Memuat Sesi...</p>
                 </div>
             </div>
         );
     }
 
-    if (connectionError) {
+    if (connectionError && !user) {
         return (
              <div className="min-h-screen flex items-center justify-center bg-slate-50 p-6">
                 <div className="max-w-md w-full bg-white p-8 rounded-3xl border border-red-100 shadow-xl text-center">
@@ -271,11 +279,6 @@ const App: React.FC = () => {
                     <button onClick={() => window.location.reload()} className="bg-primary text-white px-6 py-2.5 rounded-xl font-bold hover:bg-primary-hover transition-all shadow-lg shadow-primary/20">
                         Muat Ulang
                     </button>
-                    <div className="mt-4 pt-4 border-t border-slate-50">
-                        <p className="text-[10px] text-slate-400">
-                            Tips: Pastikan URL dan API Key Supabase valid.
-                        </p>
-                    </div>
                 </div>
             </div>
         );
@@ -287,7 +290,9 @@ const App: React.FC = () => {
 
     const handleForceChangeSuccess = () => {
         if (user) {
-            setUser({ ...user, force_password_change: false });
+            const updatedUser = { ...user, force_password_change: false };
+            setUser(updatedUser);
+            saveSessionToCache(updatedUser);
         }
     };
 
@@ -388,6 +393,13 @@ const App: React.FC = () => {
 
     return (
         <div className="flex h-screen overflow-hidden bg-background-light font-sans text-slate-900">
+            {/* Offline Indicator */}
+            {isOffline && (
+                <div className="fixed top-0 left-0 right-0 z-[100] bg-slate-800 text-white text-xs py-1 text-center flex items-center justify-center gap-2">
+                    <WifiOff className="w-3 h-3" /> Mode Offline - Perubahan disimpan secara lokal.
+                </div>
+            )}
+
             <NotificationToast 
                 isVisible={toast.show} 
                 message={toast.msg} 

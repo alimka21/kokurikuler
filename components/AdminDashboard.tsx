@@ -172,10 +172,7 @@ const AdminDashboard: React.FC = () => {
       if (!editingUser.id) {
           // --- CREATE NEW USER FLOW ---
           
-          // CRITICAL FIX: Use a temporary, non-persisting Supabase client.
-          // This allows us to create a new user via 'signUp' WITHOUT overwriting 
-          // the current Admin's session in localStorage.
-          
+          // Use a temporary, non-persisting Supabase client.
           const envUrl = getEnv('VITE_SUPABASE_URL');
           const envKey = getEnv('VITE_SUPABASE_ANON_KEY');
           const defaultUrl = 'https://ndawqyzvvyzqtqyxchjl.supabase.co';
@@ -213,10 +210,12 @@ const AdminDashboard: React.FC = () => {
                  title: 'User Dibuat',
                  text: `Akun berhasil dibuat. Email: ${data.user.email} | Pass: ${newUserPassword}`,
                  icon: 'success'
+             }).then(() => {
+                 // AUTO NAVIGATE TO PROJECTS PAGE
+                 window.location.hash = '#/projects';
              });
              
              // Manually sync to public users table immediately to reflect in Admin UI
-             // (Useful if DB triggers are slow or RLS issues exist)
              await supabase.from('users').upsert({
                  id: data.user.id,
                  email: data.user.email,
@@ -229,7 +228,6 @@ const AdminDashboard: React.FC = () => {
 
       } else {
           // --- EDIT EXISTING USER FLOW ---
-          // Update metadata in 'users' table
           const payload = {
             ...editingUser,
             email: editingUser.email.trim().toLowerCase(),
@@ -243,10 +241,11 @@ const AdminDashboard: React.FC = () => {
 
           if (error) throw error;
           Swal.fire('Sukses', 'Data user berhasil disimpan.', 'success');
+          fetchData(); // Only refresh list if staying on page
       }
 
       setIsModalOpen(false);
-      fetchData(); // Refresh list
+      
     } catch (err: any) {
       Swal.fire('Error', err.message || 'Gagal menyimpan user.', 'error');
     } finally {
