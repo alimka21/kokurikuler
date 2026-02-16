@@ -4,9 +4,14 @@ import { Dimension, Activity, ThemeOption, ProjectState, ProjectGoal, CreativeId
 
 // Safe env access
 const getEnv = (key: string) => {
-    if (typeof import.meta !== 'undefined' && (import.meta as any).env && (import.meta as any).env[key]) {
-        return (import.meta as any).env[key];
-    }
+    try {
+        // @ts-ignore
+        if (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env[key]) {
+            // @ts-ignore
+            return import.meta.env[key];
+        }
+    } catch (e) {}
+
     try {
         // @ts-ignore
         if (typeof process !== 'undefined' && process.env && process.env[key]) {
@@ -18,11 +23,21 @@ const getEnv = (key: string) => {
 };
 
 // Support both Vite import.meta.env and standard process.env
-const apiKey = getEnv('VITE_GEMINI_API_KEY') || getEnv('API_KEY') || ''; 
+const apiKey = getEnv('VITE_GEMINI_API_KEY') || getEnv('API_KEY'); 
 
-const ai = new GoogleGenAI({ apiKey });
+// Initialize AI Client Safely
+// We do not throw here to prevent the entire app from crashing on load if the key is missing.
+// Instead, we handle the missing key inside the specific API functions.
+let ai: GoogleGenAI | null = null;
+try {
+    if (apiKey && apiKey.trim().length > 0) {
+        ai = new GoogleGenAI({ apiKey: apiKey.trim() });
+    }
+} catch (e) {
+    console.error("Failed to initialize Gemini Client:", e);
+}
 
-const MODEL_NAME = 'gemini-3-flash-preview';
+const MODEL_NAME = 'gemini-2.5-flash-preview'; // Updated to valid model from guidelines
 
 const SYSTEM_INSTRUCTION = `
 Anda adalah Ahli Kokurikuler (Kurikulum Nasional). 
@@ -39,17 +54,23 @@ const handleGeminiError = (error: any) => {
         throw new Error("QUOTA_EXCEEDED");
     }
     // Check for Invalid API Key
-    if (msg.includes("API_KEY") || msg.includes("403") || msg.includes("400")) {
+    if (msg.includes("API_KEY") || msg.includes("403") || msg.includes("400") || msg.includes("INVALID_ARGUMENT")) {
         throw new Error("INVALID_API_KEY");
     }
     throw error;
+};
+
+// Check availability helper
+const checkAI = () => {
+    if (!ai) throw new Error("INVALID_API_KEY");
 };
 
 export const analyzeSchoolContext = async (text: string): Promise<string> => {
   if (!text) return "Tidak ada data.";
   
   try {
-    const response = await ai.models.generateContent({
+    checkAI();
+    const response = await ai!.models.generateContent({
       model: MODEL_NAME,
       contents: `Data Refleksi Sekolah:
       ${text}
@@ -80,7 +101,8 @@ export const analyzeSchoolContext = async (text: string): Promise<string> => {
 
 export const recommendDimensions = async (analysis: string): Promise<Dimension[]> => {
   try {
-     const response = await ai.models.generateContent({
+    checkAI();
+     const response = await ai!.models.generateContent({
       model: MODEL_NAME,
       contents: `Berdasarkan analisis konteks sekolah ini: "${analysis}"
       
@@ -115,7 +137,8 @@ export const recommendDimensions = async (analysis: string): Promise<Dimension[]
 
 export const recommendThemes = async (analysis: string, dimensions: Dimension[]): Promise<ThemeOption[]> => {
   try {
-    const response = await ai.models.generateContent({
+    checkAI();
+    const response = await ai!.models.generateContent({
       model: MODEL_NAME,
       contents: `Berdasarkan analisis konteks: "${analysis}" 
       dan dimensi terpilih: "${dimensions.join(', ')}".
@@ -164,10 +187,11 @@ export const recommendThemes = async (analysis: string, dimensions: Dimension[])
 
 export const generateCreativeIdeas = async (theme: string, format: string, analysis: string): Promise<CreativeIdeaOption[]> => {
     try {
+        checkAI();
         // Optimize context length
         const safeAnalysis = analysis ? analysis.substring(0, 2000) : "Sekolah Menengah";
 
-        const response = await ai.models.generateContent({
+        const response = await ai!.models.generateContent({
             model: MODEL_NAME,
             contents: `
             BERTINDAKLAH SEBAGAI: Creative Director Program Pendidikan.
@@ -232,6 +256,7 @@ export const generateCreativeIdeas = async (theme: string, format: string, analy
 
 export const draftProjectGoals = async (theme: string, dimensions: Dimension[], format: string): Promise<ProjectGoal[]> => {
   try {
+    checkAI();
     let additionalInstruction = "";
 
     if (format === "Kolaboratif Lintas Disiplin Ilmu") {
@@ -271,7 +296,7 @@ export const draftProjectGoals = async (theme: string, dimensions: Dimension[], 
       Output JSON Array: [{ "id": "1", "description": "Murid mampu...", "subjects": ["Mapel A", "Mapel B"] }]
     `;
 
-    const response = await ai.models.generateContent({
+    const response = await ai!.models.generateContent({
       model: MODEL_NAME,
       contents: prompt,
       config: { 
@@ -302,6 +327,7 @@ export const draftProjectGoals = async (theme: string, dimensions: Dimension[], 
 
 export const generateActivityPlan = async (totalJp: number, theme: string, goals: ProjectGoal[], format: string): Promise<Activity[]> => {
   try {
+    checkAI();
     let contextInstruction = "";
     if (format === "Kolaboratif Lintas Disiplin Ilmu") {
         contextInstruction = "Konteks: Kolaborasi Lintas Mapel. Tunjukkan keterhubungan skill antar mapel dalam aktivitas.";
@@ -315,7 +341,7 @@ export const generateActivityPlan = async (totalJp: number, theme: string, goals
     // Convert structured goals to string for prompt context
     const goalsText = goals.map(g => `- ${g.description} (${g.subjects.join(', ')})`).join('\n');
 
-    const response = await ai.models.generateContent({
+    const response = await ai!.models.generateContent({
       model: MODEL_NAME,
       contents: `
       Peran: Ahli Kurikulum & Desain Instruksional.
@@ -362,6 +388,7 @@ export const generateActivityPlan = async (totalJp: number, theme: string, goals
 
 export const generateHiddenSections = async (project: ProjectState): Promise<Partial<ProjectState>> => {
     try {
+        checkAI();
         const prompt = `
         Berdasarkan data projek berikut, buatlah narasi lengkap dokumen kokurikuler.
         
@@ -390,7 +417,7 @@ export const generateHiddenSections = async (project: ProjectState): Promise<Par
         Output JSON Object Lengkap.
         `;
 
-        const response = await ai.models.generateContent({
+        const response = await ai!.models.generateContent({
             model: MODEL_NAME,
             contents: prompt,
             config: {

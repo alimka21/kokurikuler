@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { FolderOpen, Edit3, CheckCircle, Plus, Clock, ArrowRight, Sparkles } from 'lucide-react';
+import { FolderOpen, Edit, CheckCircle, Plus, Clock, ArrowRight, Sparkles } from 'lucide-react';
 import { ProjectState } from '../types';
 
 interface DashboardProps {
@@ -57,7 +57,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onNewProject, savedProjects, onLo
               <p className="text-3xl font-bold text-slate-900">{draftProjects}</p>
             </div>
             <div className="w-12 h-12 bg-amber-50 rounded-xl flex items-center justify-center text-amber-500">
-              <Edit3 className="w-6 h-6" />
+              <Edit className="w-6 h-6" />
             </div>
           </div>
         </div>

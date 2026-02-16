@@ -1,6 +1,6 @@
 
 import React, { useMemo } from 'react';
-import { GraduationCap, LayoutDashboard, FolderOpen, CheckCircle2, Settings, ShieldCheck, LogOut } from 'lucide-react';
+import { GraduationCap, LayoutDashboard, FolderOpen, CheckCircle, Settings, ShieldCheck, LogOut } from 'lucide-react';
 import { STEPS } from '../../constants';
 import { ProjectState, User } from '../../types';
 
@@ -90,7 +90,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, currentView, onChangeView, cu
                                 >
                                     {isActive && <div className="absolute -left-[14px] top-1/2 -translate-y-1/2 w-0.5 h-6 bg-primary rounded-r-full"></div>}
                                     <span className={`flex-shrink-0 transition-colors ${isActive ? 'text-primary' : isCompleted ? 'text-emerald-500' : 'text-slate-300'}`}>
-                                        {isCompleted ? <CheckCircle2 className="w-4 h-4" /> : step.icon}
+                                        {isCompleted ? <CheckCircle className="w-4 h-4" /> : step.icon}
                                     </span>
                                     <span className="truncate">{step.title}</span>
                                 </button>

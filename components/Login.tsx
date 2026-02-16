@@ -4,6 +4,7 @@ import { supabase } from '../services/supabaseClient';
 import { GraduationCap, Loader2, Lock, User, Building, Mail, Eye, EyeOff, LogIn, UserPlus } from 'lucide-react';
 import Swal from 'sweetalert2';
 import { InputGroup } from './common/UiKit';
+import { mapSessionToUser } from '../utils/authHelpers';
 
 interface LoginProps {
     onLogin: (user: any) => void;
@@ -43,8 +44,8 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
 
                 if (error) throw error;
 
-                // Auth success
-                const meta = data.user.user_metadata || {};
+                // Safe User Mapping
+                const safeUser = mapSessionToUser(data.user);
                 
                 if (isMounted.current) {
                     Swal.fire({
@@ -55,14 +56,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
                     });
 
                     // Trigger parent update (this will unmount this component)
-                    onLogin({
-                        id: data.user.id,
-                        email: data.user.email,
-                        name: meta.name || 'Pengguna',
-                        school: meta.school || '',
-                        role: 'user', 
-                        is_registered: true
-                    });
+                    onLogin(safeUser);
                 }
 
             } else {

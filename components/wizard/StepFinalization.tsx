@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { Wand2, CheckCircle2, FileText, Download, CalendarRange, Save, Eye } from 'lucide-react';
+import { Wand2, CheckCircle, FileText, Download, CalendarRange, Save, Eye } from 'lucide-react';
 import { ProjectState } from '../../types';
 
 interface Props {
@@ -67,7 +67,7 @@ const StepFinalization: React.FC<Props> = ({
                         <div className="bg-white p-8 rounded-3xl border border-slate-200 shadow-soft-lg space-y-6">
                             <div className="flex items-center gap-4 border-b border-slate-100 pb-6">
                                 <div className="w-12 h-12 bg-green-100 text-green-600 rounded-full flex items-center justify-center">
-                                    <CheckCircle2 className="w-6 h-6" />
+                                    <CheckCircle className="w-6 h-6" />
                                 </div>
                                 <div>
                                     <h2 className="text-xl font-bold text-slate-900">Dokumen Siap</h2>

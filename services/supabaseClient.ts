@@ -3,29 +3,51 @@ import { createClient } from '@supabase/supabase-js';
 
 // Helper to safely get env vars (Handles both Vite and standard process.env)
 const getEnv = (key: string) => {
-    // Vite
-    if (typeof import.meta !== 'undefined' && (import.meta as any).env && (import.meta as any).env[key]) {
-        return (import.meta as any).env[key];
-    }
-    // Process (Webpack/Node/CRA) - wrapped in try-catch to avoid ReferenceError in pure browser
     try {
+        // Vite
+        // @ts-ignore
+        if (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env[key]) {
+            // @ts-ignore
+            return import.meta.env[key];
+        }
+    } catch (e) {}
+
+    try {
+        // Process (Webpack/Node/CRA)
         // @ts-ignore
         if (typeof process !== 'undefined' && process.env && process.env[key]) {
             // @ts-ignore
             return process.env[key];
         }
-    } catch (e) {
-        // ignore reference errors
-    }
+    } catch (e) {}
+    
     return '';
 };
 
-// Use provided credentials as fallback if .env is missing
-const supabaseUrl = getEnv('VITE_SUPABASE_URL') || 'https://zmtpnmjkakwisjydykfw.supabase.co';
-const supabaseKey = getEnv('VITE_SUPABASE_ANON_KEY') || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InptdHBubWprYWt3aXNqeWR5a2Z3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzExOTA1OTAsImV4cCI6MjA4Njc2NjU5MH0.oC0sm654Knye8aUZYVp48zwMJ76gjNEb_caIkOcbEVQ';
+// Retrieve Credentials with trimmed whitespace
+const envUrl = getEnv('VITE_SUPABASE_URL');
+const envKey = getEnv('VITE_SUPABASE_ANON_KEY');
 
-if (supabaseUrl === 'https://placeholder.supabase.co') {
-  console.warn("Supabase URL or Key is missing. Database features will not work.");
+const defaultUrl = 'https://ndawqyzvvyzqtqyxchjl.supabase.co';
+// User provided key - retained for convenience
+const defaultKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5kYXdxeXp2dnl6cXRxeXhjaGpsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzEyMjgxNzIsImV4cCI6MjA4NjgwNDE3Mn0.GWF1r6GPORrooNRVDkWrRDeGmowTHCod8NF3HFUMc5M';
+
+const supabaseUrl = (envUrl || defaultUrl).trim();
+const supabaseKey = (envKey || defaultKey).trim();
+
+// Safe Client Initialization
+// This prevents the app from crashing (White Screen) if the URL/Key are malformed.
+let client;
+try {
+    if (!supabaseUrl || !supabaseUrl.startsWith('http')) {
+        throw new Error("Invalid Supabase URL");
+    }
+    client = createClient(supabaseUrl, supabaseKey);
+} catch (error) {
+    console.error("Supabase Client Init Failed:", error);
+    // Fallback to a safe dummy client to allow App UI to render the error message
+    // instead of crashing entirely at the module level.
+    client = createClient('https://placeholder.supabase.co', 'placeholder');
 }
 
-export const supabase = createClient(supabaseUrl, supabaseKey);
+export const supabase = client;

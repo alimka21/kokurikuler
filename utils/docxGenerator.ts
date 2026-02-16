@@ -306,7 +306,8 @@ export const generateAndDownloadDocx = async (project: ProjectState) => {
     });
 
     const blob = await Packer.toBlob(doc);
-    const saveAs = (FileSaver as any).saveAs || FileSaver; 
+    // Safer saveAs execution
+    const saveAs = (FileSaver && (FileSaver as any).saveAs) ? (FileSaver as any).saveAs : FileSaver;
     saveAs(blob, `Modul_Projek_${project.selectedTheme.replace(/\s+/g, '_')}.docx`);
 };
 
@@ -467,6 +468,7 @@ export const generateAnnualProgramDocx = async (primaryProject: ProjectState, re
     });
 
     const blob = await Packer.toBlob(doc);
-    const saveAs = (FileSaver as any).saveAs || FileSaver; 
+    // Safer saveAs execution
+    const saveAs = (FileSaver && (FileSaver as any).saveAs) ? (FileSaver as any).saveAs : FileSaver;
     saveAs(blob, `Program_Tahunan_Kelas_${primaryProject.targetClass.replace(/\s+/g, '_')}.docx`);
 }

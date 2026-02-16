@@ -7,7 +7,7 @@ import {
   FolderOpen, 
   Search, 
   Plus, 
-  Edit3, 
+  Edit, 
   Trash2, 
   ShieldCheck, 
   Shield, 
@@ -234,7 +234,7 @@ const AdminDashboard: React.FC = () => {
                                 <td className="px-6 py-4">
                                     <div className="flex items-center justify-center gap-2">
                                         <button onClick={() => handleOpenModal(u)} className="p-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors">
-                                            <Edit3 className="w-4 h-4" />
+                                            <Edit className="w-4 h-4" />
                                         </button>
                                         <button onClick={() => handleDelete(u.id, u.email)} className="p-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-colors">
                                             <Trash2 className="w-4 h-4" />
