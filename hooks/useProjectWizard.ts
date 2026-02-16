@@ -11,7 +11,7 @@ export const useProjectWizard = (user: any) => {
     // Current active project being edited
     const [project, setProject] = useState<ProjectState>(() => ({
         ...INITIAL_PROJECT_STATE,
-        id: Date.now().toString(),
+        id: crypto.randomUUID(), // Initialize with UUID immediately
         // Pre-fill user data if available
         schoolName: user?.school || '',
         coordinatorName: user?.name || ''
@@ -39,30 +39,54 @@ export const useProjectWizard = (user: any) => {
             .order('updated_at', { ascending: false });
 
         if (!error && data) {
-            const mappedProjects = data.map((d: any) => ({
-                ...d.content,
-                id: d.id, // Ensure ID matches DB ID
-            }));
+            const mappedProjects = data.map((d: any) => {
+                // Fallback if content is null (legacy data)
+                const content = d.content || {};
+                return {
+                    ...INITIAL_PROJECT_STATE, // Ensure defaults
+                    ...content,
+                    id: d.id, // Database ID is source of truth
+                };
+            });
             setSavedProjects(mappedProjects);
         }
     };
 
     const persistToSupabase = async (proj: ProjectState) => {
-        // Upsert based on ID
+        // Prepare Payload: Hybrid Approach
+        // 1. Relational Columns (for Indexing/Filtering)
+        // 2. JSONB 'content' (for Full App State)
+        const payload = {
+            id: proj.id,
+            user_id: user.id, // Foreign Key link
+            user_email: user.email, // Redundant but useful for quick checks
+            
+            // Metadata for Dashboard Querying
+            title: proj.title,
+            school_name: proj.schoolName,
+            phase: proj.phase,
+            target_class: proj.targetClass,
+            total_jp_annual: proj.totalJpAnnual,
+            project_jp_allocation: proj.projectJpAllocation,
+            selected_theme: proj.selectedTheme,
+            activity_format: proj.activityFormat,
+            analysis_summary: proj.analysisSummary,
+            
+            // Complex Data stored as JSONB
+            content: proj,
+            
+            updated_at: new Date().toISOString()
+        };
+
         const { error } = await supabase
             .from('projects')
-            .upsert({
-                id: proj.id,
-                user_email: user.email,
-                content: proj,
-                updated_at: new Date().toISOString()
-            });
+            .upsert(payload);
 
         if (error) {
             console.error("Error saving to Supabase", error);
-            Swal.fire('Error', 'Gagal menyimpan ke cloud', 'error');
+            Swal.fire('Error', 'Gagal menyimpan ke cloud. Periksa koneksi internet.', 'error');
         } else {
-            fetchProjects(); // Refresh list
+            fetchProjects(); // Refresh list to get server timestamp/consistency
         }
     };
 
@@ -98,7 +122,7 @@ export const useProjectWizard = (user: any) => {
     const createNewProject = () => {
         setProject(prev => ({
             ...INITIAL_PROJECT_STATE,
-            id: crypto.randomUUID(), // Use UUID for DB compatibility
+            id: crypto.randomUUID(), // Generate new UUID
             schoolName: user?.school || prev.schoolName,
             coordinatorName: user?.name || prev.coordinatorName,
             coordinatorNip: prev.coordinatorNip,
@@ -124,9 +148,10 @@ export const useProjectWizard = (user: any) => {
     const duplicateProject = async (id: string, newClass: string, newPhase: string) => {
         const original = savedProjects.find(p => p.id === id);
         if (original) {
+            const newId = crypto.randomUUID();
             const newProject: ProjectState = {
                 ...original,
-                id: crypto.randomUUID(),
+                id: newId,
                 targetClass: newClass,
                 phase: newPhase,
                 lastUpdated: Date.now(),
@@ -190,12 +215,6 @@ export const useProjectWizard = (user: any) => {
                 showError("⚠️ Tema Projek belum dipilih.");
                 return false;
             }
-            // Optional: Enforce Creative Title selection
-            if (project.title === "MODUL PROJEK" || !project.title) {
-                // If user hasn't selected a creative idea, we might warn them or just let them proceed with default title
-                // For better UX, let's suggest it but not block hard if they really want default.
-                // But typically Step 3 is now Theme -> Format -> Idea.
-            }
         }
         if (action === 'activities' || (action === 'next' && currentStep === 4)) {
             if (project.projectGoals.length === 0) {
@@ -250,7 +269,6 @@ export const useProjectWizard = (user: any) => {
                     setCurrentStep(c => c + 1);
                 } catch (e) {
                     handleAIError(e);
-                    // Stay on current step if error
                 }
             } else {
                 setCurrentStep(c => c + 1);

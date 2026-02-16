@@ -3,13 +3,15 @@ import React, { useState } from 'react';
 import { STEPS } from './constants';
 import { useProjectWizard } from './hooks/useProjectWizard';
 import { NotificationToast, NotificationType } from './components/common/UiKit';
+import { User } from './types';
 
 // View Components
 import Dashboard from './components/Dashboard';
 import MyProjects from './components/MyProjects';
 import Editor from './components/Editor';
 import IdentitySettings from './components/IdentitySettings';
-import Login from './components/Login'; // Import Login
+import AdminDashboard from './components/AdminDashboard'; // Import Admin
+import Login from './components/Login'; 
 
 // Layout
 import Sidebar from './components/layout/Sidebar';
@@ -24,13 +26,13 @@ import StepGoals from './components/wizard/StepGoals';
 import StepActivityPlanning from './components/wizard/StepActivityPlanning';
 import StepFinalization from './components/wizard/StepFinalization';
 
-import { ChevronRight, ChevronLeft, Save, Plus } from 'lucide-react';
+import { ChevronRight, ChevronLeft, Save } from 'lucide-react';
 
-type ViewMode = 'dashboard' | 'projects' | 'wizard' | 'editor' | 'identity';
+type ViewMode = 'dashboard' | 'projects' | 'wizard' | 'editor' | 'identity' | 'admin';
 
 const App: React.FC = () => {
     // Auth State
-    const [user, setUser] = useState<any>(null);
+    const [user, setUser] = useState<User | null>(null);
 
     const [view, setView] = useState<ViewMode>('dashboard');
     const [isSidebarOpen, setSidebarOpen] = useState(false);
@@ -165,6 +167,7 @@ const App: React.FC = () => {
     if (view === 'editor') headerTitle = "Document Editor";
     else if (view === 'projects') headerTitle = "Library & Projek";
     else if (view === 'identity') headerTitle = "Pengaturan Data Sekolah";
+    else if (view === 'admin') headerTitle = "Admin Dashboard";
     else if (view === 'wizard') headerTitle = STEPS[currentStep].title;
 
     return (
@@ -183,7 +186,7 @@ const App: React.FC = () => {
                 onChangeView={(v) => setView(v)}
                 currentStep={currentStep}
                 onStepClick={(idx) => { setView('wizard'); goToStep(idx); }}
-                user={{ name: user.name, school: user.school }}
+                user={user}
                 projectData={project}
                 onEditIdentity={() => setView('identity')}
             />
@@ -206,6 +209,9 @@ const App: React.FC = () => {
                     />}
                     
                     {view === 'identity' && <IdentitySettings project={project} onChange={updateProject} onSave={() => showNotify('Data Sekolah & Admin berhasil disimpan!', 'success')} />}
+
+                    {/* Admin View */}
+                    {view === 'admin' && user.role === 'admin' && <AdminDashboard />}
 
                     {view === 'wizard' && (
                         <div className="max-w-5xl mx-auto pb-32">

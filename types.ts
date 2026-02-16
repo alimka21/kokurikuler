@@ -1,4 +1,5 @@
 
+
 export enum Dimension {
   FAITH = "Keimanan dan Ketakwaan kepada Tuhan YME",
   GLOBAL_CITIZEN = "Kewargaan (Global/Lokal)",
@@ -8,6 +9,15 @@ export enum Dimension {
   INDEPENDENCE = "Kemandirian",
   HEALTH = "Kesehatan",
   COMMUNICATION = "Komunikasi"
+}
+
+export interface User {
+  id: string;
+  email: string;
+  name: string;
+  school: string;
+  role: 'admin' | 'user';
+  created_at?: string;
 }
 
 export interface Activity {

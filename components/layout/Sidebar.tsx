@@ -1,8 +1,8 @@
 
 import React, { useMemo } from 'react';
-import { GraduationCap, LayoutDashboard, FolderOpen, CheckCircle2, Settings } from 'lucide-react';
+import { GraduationCap, LayoutDashboard, FolderOpen, CheckCircle2, Settings, ShieldCheck } from 'lucide-react';
 import { STEPS } from '../../constants';
-import { ProjectState } from '../../types';
+import { ProjectState, User } from '../../types';
 
 interface SidebarProps {
     isOpen: boolean;
@@ -10,7 +10,7 @@ interface SidebarProps {
     onChangeView: (view: any) => void;
     currentStep: number;
     onStepClick: (idx: number) => void;
-    user: { name: string; school: string };
+    user: User;
     projectData?: ProjectState;
     onEditIdentity: () => void; 
 }
@@ -53,9 +53,18 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, currentView, onChangeView, cu
                         <Settings className={`w-5 h-5 ${currentView === 'identity' ? 'text-primary' : 'text-slate-400 group-hover:text-slate-600'}`} />
                         <span>Data Sekolah & Admin</span>
                     </button>
+
+                    {/* Admin Menu Only */}
+                    {user.role === 'admin' && (
+                        <button onClick={() => onChangeView('admin')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all font-medium text-sm group mt-4 border border-purple-100 ${currentView === 'admin' ? 'bg-purple-50 text-purple-700' : 'bg-slate-50/50 text-slate-600 hover:bg-purple-50 hover:text-purple-700'}`}>
+                            <ShieldCheck className={`w-5 h-5 ${currentView === 'admin' ? 'text-purple-600' : 'text-slate-400 group-hover:text-purple-600'}`} />
+                            <span>Admin Panel</span>
+                        </button>
+                    )}
                 </div>
 
-                {/* Wizard Steps */}
+                {/* Wizard Steps (Only visible if not in Admin view) */}
+                {currentView !== 'admin' && (
                 <div className="space-y-2">
                     <div className="flex items-center justify-between px-3 mb-2">
                         <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest">Tahapan Projek</h3>
@@ -88,16 +97,20 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, currentView, onChangeView, cu
                         })}
                     </div>
                 </div>
+                )}
             </div>
 
             {/* Footer User Profile */}
             <div className="p-6 border-t border-slate-100 bg-slate-50/50">
                 <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-white border border-slate-200 rounded-full flex items-center justify-center text-slate-700 font-bold text-sm shadow-sm">
+                    <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-sm shadow-sm ${user.role === 'admin' ? 'bg-purple-600' : 'bg-slate-400'}`}>
                         {user.name ? user.name.charAt(0) : 'U'}
                     </div>
                     <div className="overflow-hidden">
-                        <p className="text-sm font-bold text-slate-900 truncate">{user.name || 'User'}</p>
+                        <div className="flex items-center gap-1">
+                            <p className="text-sm font-bold text-slate-900 truncate">{user.name || 'User'}</p>
+                            {user.role === 'admin' && <ShieldCheck className="w-3 h-3 text-purple-600" />}
+                        </div>
                         <p className="text-xs text-slate-500 truncate">{user.school || 'School Name'}</p>
                     </div>
                 </div>
