@@ -1,12 +1,9 @@
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useAuth } from './contexts/AuthContext';
+import { ProjectProvider, useProject } from './contexts/ProjectContext';
 import { STEPS } from './constants';
-import { useProjectWizard } from './hooks/useProjectWizard';
 import { NotificationToast, NotificationType } from './components/common/UiKit';
-import { User } from './types';
-import { supabase } from './services/supabaseClient';
-import { mapSessionToUser } from './utils/authHelpers';
-import { saveSessionToCache, restoreSessionFromCache, clearSessionCache } from './utils/sessionManager';
 
 // View Components
 import Dashboard from './components/Dashboard';
@@ -35,27 +32,31 @@ import { ChevronRight, ChevronLeft, Save, AlertTriangle, WifiOff } from 'lucide-
 
 type ViewMode = 'dashboard' | 'projects' | 'wizard' | 'editor' | 'identity' | 'admin' | 'account';
 
-const App: React.FC = () => {
-    // Auth State
-    const [user, setUser] = useState<User | null>(null);
-    const [isLoadingUser, setIsLoadingUser] = useState(true);
-    const [connectionError, setConnectionError] = useState<string | null>(null);
-    const [isOffline, setIsOffline] = useState(!navigator.onLine);
+// --- SUB-COMPONENT: The Authenticated Layout & Routing ---
+// This component is only rendered when User is present and ProjectProvider is active
+const AuthenticatedApp: React.FC = () => {
+    const { user, logout, updateUser } = useAuth();
+    const { 
+        project, savedProjects, updateProject, currentStep, nextStep, prevStep, goToStep,
+        loadingAI, isFinalizing, saveProject, createNewProject, loadProject, duplicateProject,
+        runAnalysis, runThemeRecommend, runCreativeIdeaGen, runGoalDraft, runActivityPlan, 
+        runFinalization, exportDocx, exportAnnualDocx 
+    } = useProject();
 
-    // App State
+    // UI State
     const [view, setView] = useState<ViewMode>('dashboard');
     const [isSidebarOpen, setSidebarOpen] = useState(false);
+    const [isOffline, setIsOffline] = useState(!navigator.onLine);
     const [toast, setToast] = useState<{ show: boolean; msg: string; type: NotificationType }>({ show: false, msg: '', type: 'success' });
 
     const showNotify = (msg: string, type: NotificationType = 'success') => {
         setToast({ show: true, msg, type });
     };
 
-    // --- ARCHITECTURE: Offline Detection ---
+    // Offline Detection
     useEffect(() => {
         const handleOnline = () => { setIsOffline(false); showNotify("Koneksi Internet Kembali", "success"); };
         const handleOffline = () => { setIsOffline(true); };
-        
         window.addEventListener('online', handleOnline);
         window.addEventListener('offline', handleOffline);
         return () => {
@@ -64,133 +65,11 @@ const App: React.FC = () => {
         };
     }, []);
 
-    // --- ARCHITECTURE: Robust Session Handling ---
-    useEffect(() => {
-        let mounted = true;
-
-        // 1. LAZY LOAD: Try to load from local cache first (Instant Render)
-        const cachedUser = restoreSessionFromCache();
-        if (cachedUser) {
-            setUser(cachedUser);
-            setIsLoadingUser(false); // Immediate UI interactive
-        }
-
-        // Helper to construct and sync user
-        const fetchAndSyncUser = async (sessionUser: any) => {
-            const basicUser = mapSessionToUser(sessionUser);
-            
-            // If we have no cache, show basic user immediately
-            if (!cachedUser) setUser(basicUser);
-
-            try {
-                if (!supabase) return;
-
-                // Attempt 1: Fetch by Auth ID
-                let { data: profile, error } = await supabase
-                    .from('users')
-                    .select('*')
-                    .eq('id', sessionUser.id)
-                    .maybeSingle();
-
-                // Attempt 2: Fetch by Email (Self-Healing)
-                if (!profile && sessionUser.email) {
-                    const { data: profileByEmail } = await supabase
-                        .from('users')
-                        .select('*')
-                        .ilike('email', sessionUser.email)
-                        .maybeSingle();
-                    
-                    if (profileByEmail) {
-                        profile = profileByEmail;
-                        // Auto-fix ID mismatch
-                        if (profile.id !== sessionUser.id) {
-                            await supabase.from('users').update({ id: sessionUser.id }).eq('email', sessionUser.email);
-                        }
-                    }
-                }
-
-                // 3. EMERGENCY OVERRIDE
-                if (sessionUser.email === 'alimkamcl@gmail.com') {
-                    if (!profile) profile = { ...basicUser };
-                    profile.role = 'admin';
-                }
-
-                if (mounted && profile) {
-                    const fullUser = {
-                        ...basicUser,
-                        ...profile,
-                        id: sessionUser.id,
-                        force_password_change: basicUser.force_password_change 
-                    };
-                    
-                    setUser(fullUser);
-                    saveSessionToCache(fullUser); // Update Cache
-                }
-            } catch (e) {
-                console.error("Profile sync silent fail", e);
-            }
-        };
-
-        const initAuth = async () => {
-            // Only show loader if no cache
-            if (!cachedUser) setIsLoadingUser(true);
-            setConnectionError(null);
-            
-            try {
-                const { data: { session }, error } = await supabase.auth.getSession();
-                if (error) throw error;
-                
-                if (session?.user) {
-                    await fetchAndSyncUser(session.user);
-                } else {
-                    setUser(null);
-                    clearSessionCache();
-                }
-            } catch (e: any) {
-                console.error("Auth Error:", e);
-                // If offline and have cache, don't error out
-                if (!cachedUser) {
-                    let msg = e.message || "Gagal memuat sistem.";
-                    if (msg.includes("NetworkError")) msg = "Koneksi Bermasalah.";
-                    setConnectionError(msg);
-                }
-            } finally {
-                if (mounted) setIsLoadingUser(false);
-            }
-        };
-
-        initAuth();
-
-        const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-             if (event === 'SIGNED_IN' && session?.user) {
-                 await fetchAndSyncUser(session.user);
-             } else if (event === 'SIGNED_OUT') {
-                 setUser(null);
-                 clearSessionCache();
-                 window.location.hash = '';
-             }
-        });
-
-        return () => {
-            mounted = false;
-            subscription.unsubscribe();
-        };
-    }, []);
-
-    const handleLogout = async () => {
-        clearSessionCache(); // Clear cache immediately
-        await supabase.auth.signOut();
-        setView('dashboard');
-        setUser(null);
-    };
-
-    // --- Routing Logic ---
+    // Hash Routing Logic
     useEffect(() => {
         if (!user) return;
-
         const handleHashChange = () => {
             const hash = window.location.hash.replace('#/', '');
-            
             if (hash === 'admin') {
                 if (user.role === 'admin') setView('admin');
                 else {
@@ -203,22 +82,18 @@ const App: React.FC = () => {
             else if (hash === 'editor') setView('editor');
             else if (hash === 'settings') setView('identity');
             else if (hash === 'account') setView('account');
-            else {
-                setView('dashboard');
-            }
+            else setView('dashboard');
         };
-
         handleHashChange();
         window.addEventListener('hashchange', handleHashChange);
         return () => window.removeEventListener('hashchange', handleHashChange);
-    }, [user?.role]); 
+    }, [user?.role]);
 
     // Sync View to Hash
     useEffect(() => {
         if (!user) return;
         const hash = window.location.hash.replace('#/', '');
         let targetHash = 'dashboard';
-
         if (view === 'admin') targetHash = 'admin';
         else if (view === 'projects') targetHash = 'projects';
         else if (view === 'wizard') targetHash = 'wizard';
@@ -231,31 +106,115 @@ const App: React.FC = () => {
         }
     }, [view, user]);
 
-    const {
-        project,
-        savedProjects, 
-        updateProject,
-        currentStep,
-        nextStep,
-        prevStep,
-        goToStep,
-        loadingAI,
-        isFinalizing,
-        saveProject,
-        createNewProject,
-        loadProject,
-        duplicateProject,
-        runAnalysis,
-        runThemeRecommend,
-        runCreativeIdeaGen,
-        runGoalDraft,
-        runActivityPlan,
-        runFinalization,
-        exportDocx,
-        exportAnnualDocx
-    } = useProjectWizard(user);
+    const handleStartProject = () => {
+        createNewProject();
+        setView('wizard');
+    };
 
-    if (isLoadingUser) {
+    const handleLoadProject = (id: string) => {
+        loadProject(id);
+        setView('wizard');
+    };
+
+    const handleLogout = async () => {
+        await logout();
+        setView('dashboard');
+    };
+
+    const renderStepContent = () => {
+        switch (currentStep + 1) {
+            case 1: return <StepIdentity project={project} onChange={updateProject} savedProjects={savedProjects} />;
+            case 2: return <StepAnalysis data={project.contextAnalysis} phase={project.phase} targetClass={project.targetClass} onUpdateData={(d) => updateProject('contextAnalysis', d)} onAnalyze={runAnalysis} summary={project.analysisSummary} isAnalyzing={loadingAI} />;
+            case 3: return <StepDimensions recommended={project.recommendedDimensions} selected={project.selectedDimensions} onSelect={(dims) => updateProject('selectedDimensions', dims)} isLoading={loadingAI} />;
+            case 4: return <StepThemeAndFormat options={project.themeOptions} selectedTheme={project.selectedTheme} onSelectTheme={(t, r) => { updateProject('selectedTheme', t); updateProject('selectedThemeReason', r); }} activityFormat={project.activityFormat} onSelectFormat={(f) => updateProject('activityFormat', f)} creativeIdeas={project.creativeIdeas} selectedIdea={project.title} onSelectIdea={(t) => { updateProject('title', t); const selectedIdeaObj = project.creativeIdeas.find(idea => idea.title === t); if (selectedIdeaObj) { updateProject('projectDescription', selectedIdeaObj.description); } }} onGenerateIdeas={runCreativeIdeaGen} isLoading={loadingAI} onGenerateThemes={runThemeRecommend} />;
+            case 5: return <StepGoals goals={project.projectGoals} setGoals={(g) => updateProject('projectGoals', g)} onGenerate={runGoalDraft} isGenerating={loadingAI} />;
+            case 6: return <StepActivityPlanning totalJp={project.projectJpAllocation} totalAnnualJp={project.totalJpAnnual} setTotalJp={(v) => updateProject('projectJpAllocation', v)} activities={project.activities} setActivities={(a) => updateProject('activities', a)} onGenerate={runActivityPlan} isGenerating={loadingAI} />;
+            case 7: return <StepFinalization project={project} isReady={!!project.assessmentPlan} isFinalizing={isFinalizing} themeName={project.selectedTheme} onFinalize={runFinalization} onViewEditor={() => setView('editor')} onDownload={exportDocx} onDownloadAnnual={exportAnnualDocx} onSaveProject={saveProject} />;
+            default: return null;
+        }
+    };
+
+    let headerTitle = "Overview";
+    if (view === 'editor') headerTitle = "Document Editor";
+    else if (view === 'projects') headerTitle = "Library & Projek";
+    else if (view === 'identity') headerTitle = "Pengaturan Data Sekolah";
+    else if (view === 'account') headerTitle = "Pengaturan Akun";
+    else if (view === 'admin') headerTitle = "Admin Dashboard";
+    else if (view === 'wizard') headerTitle = STEPS[currentStep].title;
+
+    // Check for Force Password Change
+    if (user?.force_password_change) {
+        return <ForcePasswordChange onSuccess={() => updateUser({ ...user, force_password_change: false })} />;
+    }
+
+    return (
+        <div className="flex h-screen overflow-hidden bg-background-light font-sans text-slate-900">
+             {isOffline && (
+                <div className="fixed top-0 left-0 right-0 z-[100] bg-slate-800 text-white text-xs py-1 text-center flex items-center justify-center gap-2">
+                    <WifiOff className="w-3 h-3" /> Mode Offline - Perubahan disimpan secara lokal.
+                </div>
+            )}
+            <NotificationToast isVisible={toast.show} message={toast.msg} type={toast.type} onClose={() => setToast({ ...toast, show: false })} />
+
+            <Sidebar 
+                isOpen={isSidebarOpen} currentView={view} onChangeView={(v) => setView(v)}
+                currentStep={currentStep} onStepClick={(idx) => { setView('wizard'); goToStep(idx); }}
+                user={user!} projectData={project} onEditIdentity={() => setView('identity')} onLogout={handleLogout}
+            />
+
+            <main className="flex-1 flex flex-col h-screen overflow-hidden relative">
+                <Header title={headerTitle} onToggleSidebar={() => setSidebarOpen(!isSidebarOpen)} />
+                <div className="flex-1 overflow-y-auto scroll-smooth p-6 sm:p-8">
+                    {view === 'dashboard' && <Dashboard onNewProject={handleStartProject} savedProjects={savedProjects} onLoadProject={handleLoadProject} />}
+                    {view === 'projects' && <MyProjects onNewProject={handleStartProject} savedProjects={savedProjects} onLoadProject={handleLoadProject} onDuplicateProject={duplicateProject} />}
+                    {view === 'identity' && <IdentitySettings project={project} onChange={updateProject} onSave={() => showNotify('Data Sekolah berhasil disimpan!', 'success')} />}
+                    {view === 'account' && <AccountSettings user={user!} />}
+                    {view === 'admin' && user!.role === 'admin' && <AdminDashboard />}
+                    {view === 'wizard' && (
+                        <div className="max-w-5xl mx-auto pb-32">
+                            <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+                                {renderStepContent()}
+                            </div>
+                        </div>
+                    )}
+                    {view === 'editor' && (
+                        <div className="max-w-5xl mx-auto h-full">
+                            <Editor label="Review Dokumen Lengkap" value={`MODUL PROJEK\n${project.schoolName}\n\nTema: ${project.selectedTheme}\n\n[Dokumen lengkap tersedia dalam format .docx setelah diunduh]`} onChange={()=>{}} height="h-screen" />
+                        </div>
+                    )}
+                </div>
+
+                {view === 'wizard' && (
+                    <div className="absolute bottom-0 left-0 right-0 bg-white/90 backdrop-blur-md border-t border-slate-200 p-6 z-40">
+                        <div className="max-w-5xl mx-auto flex flex-col sm:flex-row justify-between items-center gap-4">
+                            <button onClick={prevStep} disabled={currentStep === 0} className="px-6 py-3 rounded-xl font-semibold text-slate-600 hover:bg-slate-100 hover:text-slate-900 disabled:opacity-50 flex items-center gap-2 transition-all">
+                                <ChevronLeft className="w-5 h-5" /> Back
+                            </button>
+                            <div className="flex items-center gap-3">
+                                {currentStep < STEPS.length - 1 && (
+                                    <button onClick={() => saveProject()} className="px-6 py-3 rounded-xl font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 transition-all flex items-center gap-2">
+                                        <Save className="w-4 h-4" /> Simpan
+                                    </button>
+                                )}
+                                {currentStep < STEPS.length - 1 && (
+                                    <button onClick={nextStep} className="px-8 py-3 rounded-xl font-bold text-white bg-primary shadow-lg shadow-primary/30 hover:bg-primary-hover hover:-translate-y-0.5 transition-all flex items-center gap-2">
+                                        Continue <ChevronRight className="w-5 h-5" />
+                                    </button>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                )}
+            </main>
+        </div>
+    );
+};
+
+// --- ROOT COMPONENT: Orchestrator ---
+const App: React.FC = () => {
+    const { user, isLoading, connectionError, login } = useAuth();
+
+    if (isLoading) {
         return (
             <div className="min-h-screen flex items-center justify-center bg-slate-50">
                 <div className="animate-pulse flex flex-col items-center">
@@ -285,218 +244,13 @@ const App: React.FC = () => {
     }
 
     if (!user) {
-        return <Login onLogin={(u) => setUser(u)} />;
+        return <Login onLogin={login} />;
     }
-
-    const handleForceChangeSuccess = () => {
-        if (user) {
-            const updatedUser = { ...user, force_password_change: false };
-            setUser(updatedUser);
-            saveSessionToCache(updatedUser);
-        }
-    };
-
-    if (user.force_password_change) {
-        return <ForcePasswordChange onSuccess={handleForceChangeSuccess} />;
-    }
-
-    const handleStartProject = () => {
-        createNewProject();
-        setView('wizard');
-    };
-
-    const handleLoadProject = (id: string) => {
-        loadProject(id);
-        setView('wizard');
-    };
-
-    const renderStepContent = () => {
-        switch (currentStep + 1) {
-            case 1: return <StepIdentity 
-                project={project} 
-                onChange={updateProject} 
-                savedProjects={savedProjects} 
-            />;
-            case 2: return <StepAnalysis
-                data={project.contextAnalysis}
-                phase={project.phase}
-                targetClass={project.targetClass}
-                onUpdateData={(d) => updateProject('contextAnalysis', d)}
-                onAnalyze={runAnalysis}
-                summary={project.analysisSummary}
-                isAnalyzing={loadingAI}
-            />;
-            case 3: return <StepDimensions 
-                recommended={project.recommendedDimensions} 
-                selected={project.selectedDimensions} 
-                onSelect={(dims) => updateProject('selectedDimensions', dims)} 
-                isLoading={loadingAI}
-            />;
-            case 4: return <StepThemeAndFormat
-                options={project.themeOptions}
-                selectedTheme={project.selectedTheme}
-                onSelectTheme={(t, r) => { updateProject('selectedTheme', t); updateProject('selectedThemeReason', r); }}
-                activityFormat={project.activityFormat}
-                onSelectFormat={(f) => updateProject('activityFormat', f)}
-                
-                creativeIdeas={project.creativeIdeas}
-                selectedIdea={project.title}
-                onSelectIdea={(t) => {
-                    updateProject('title', t);
-                    const selectedIdeaObj = project.creativeIdeas.find(idea => idea.title === t);
-                    if (selectedIdeaObj) {
-                        updateProject('projectDescription', selectedIdeaObj.description);
-                    }
-                }}
-                onGenerateIdeas={runCreativeIdeaGen}
-                
-                isLoading={loadingAI}
-                onGenerateThemes={runThemeRecommend}
-            />;
-            case 5: return <StepGoals 
-                goals={project.projectGoals} 
-                setGoals={(g) => updateProject('projectGoals', g)} 
-                onGenerate={runGoalDraft} 
-                isGenerating={loadingAI} 
-            />;
-            case 6: return <StepActivityPlanning
-                totalJp={project.projectJpAllocation}
-                totalAnnualJp={project.totalJpAnnual}
-                setTotalJp={(v) => updateProject('projectJpAllocation', v)}
-                activities={project.activities}
-                setActivities={(a) => updateProject('activities', a)}
-                onGenerate={runActivityPlan}
-                isGenerating={loadingAI}
-            />;
-            case 7: return <StepFinalization 
-                project={project}
-                isReady={!!project.assessmentPlan}
-                isFinalizing={isFinalizing}
-                themeName={project.selectedTheme}
-                onFinalize={runFinalization}
-                onViewEditor={() => setView('editor')}
-                onDownload={exportDocx}
-                onDownloadAnnual={exportAnnualDocx}
-                onSaveProject={saveProject}
-            />;
-            default: return null;
-        }
-    };
-
-    let headerTitle = "Overview";
-    if (view === 'editor') headerTitle = "Document Editor";
-    else if (view === 'projects') headerTitle = "Library & Projek";
-    else if (view === 'identity') headerTitle = "Pengaturan Data Sekolah";
-    else if (view === 'account') headerTitle = "Pengaturan Akun";
-    else if (view === 'admin') headerTitle = "Admin Dashboard";
-    else if (view === 'wizard') headerTitle = STEPS[currentStep].title;
 
     return (
-        <div className="flex h-screen overflow-hidden bg-background-light font-sans text-slate-900">
-            {/* Offline Indicator */}
-            {isOffline && (
-                <div className="fixed top-0 left-0 right-0 z-[100] bg-slate-800 text-white text-xs py-1 text-center flex items-center justify-center gap-2">
-                    <WifiOff className="w-3 h-3" /> Mode Offline - Perubahan disimpan secara lokal.
-                </div>
-            )}
-
-            <NotificationToast 
-                isVisible={toast.show} 
-                message={toast.msg} 
-                type={toast.type} 
-                onClose={() => setToast({ ...toast, show: false })} 
-            />
-
-            <Sidebar 
-                isOpen={isSidebarOpen}
-                currentView={view}
-                onChangeView={(v) => setView(v)}
-                currentStep={currentStep}
-                onStepClick={(idx) => { setView('wizard'); goToStep(idx); }}
-                user={user}
-                projectData={project}
-                onEditIdentity={() => setView('identity')}
-                onLogout={handleLogout}
-            />
-
-            <main className="flex-1 flex flex-col h-screen overflow-hidden relative">
-                <Header title={headerTitle} onToggleSidebar={() => setSidebarOpen(!isSidebarOpen)} />
-
-                <div className="flex-1 overflow-y-auto scroll-smooth p-6 sm:p-8">
-                    {view === 'dashboard' && <Dashboard 
-                        onNewProject={handleStartProject} 
-                        savedProjects={savedProjects}
-                        onLoadProject={handleLoadProject}
-                    />}
-                    
-                    {view === 'projects' && <MyProjects 
-                        onNewProject={handleStartProject} 
-                        savedProjects={savedProjects}
-                        onLoadProject={handleLoadProject}
-                        onDuplicateProject={duplicateProject}
-                    />}
-                    
-                    {view === 'identity' && <IdentitySettings project={project} onChange={updateProject} onSave={() => showNotify('Data Sekolah & Admin berhasil disimpan!', 'success')} />}
-
-                    {view === 'account' && <AccountSettings user={user} />}
-
-                    {view === 'admin' && user.role === 'admin' && <AdminDashboard />}
-
-                    {view === 'wizard' && (
-                        <div className="max-w-5xl mx-auto pb-32">
-                            <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
-                                {renderStepContent()}
-                            </div>
-                        </div>
-                    )}
-
-                    {view === 'editor' && (
-                        <div className="max-w-5xl mx-auto h-full">
-                            <Editor 
-                                label="Review Dokumen Lengkap" 
-                                value={`MODUL PROJEK\n${project.schoolName}\n\nTema: ${project.selectedTheme}\n\n[Dokumen lengkap tersedia dalam format .docx setelah diunduh]`} 
-                                onChange={()=>{}} 
-                                height="h-screen" 
-                            />
-                        </div>
-                    )}
-                </div>
-
-                {view === 'wizard' && (
-                    <div className="absolute bottom-0 left-0 right-0 bg-white/90 backdrop-blur-md border-t border-slate-200 p-6 z-40">
-                        <div className="max-w-5xl mx-auto flex flex-col sm:flex-row justify-between items-center gap-4">
-                            <button
-                                onClick={prevStep}
-                                disabled={currentStep === 0}
-                                className="px-6 py-3 rounded-xl font-semibold text-slate-600 hover:bg-slate-100 hover:text-slate-900 disabled:opacity-50 flex items-center gap-2 transition-all"
-                            >
-                                <ChevronLeft className="w-5 h-5" /> Back
-                            </button>
-                            
-                            <div className="flex items-center gap-3">
-                                {currentStep < STEPS.length - 1 && (
-                                    <button
-                                        onClick={() => saveProject()}
-                                        className="px-6 py-3 rounded-xl font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 transition-all flex items-center gap-2"
-                                    >
-                                        <Save className="w-4 h-4" /> Simpan
-                                    </button>
-                                )}
-
-                                {currentStep < STEPS.length - 1 && (
-                                    <button
-                                        onClick={nextStep}
-                                        className="px-8 py-3 rounded-xl font-bold text-white bg-primary shadow-lg shadow-primary/30 hover:bg-primary-hover hover:-translate-y-0.5 transition-all flex items-center gap-2"
-                                    >
-                                        Continue <ChevronRight className="w-5 h-5" />
-                                    </button>
-                                )}
-                            </div>
-                        </div>
-                    </div>
-                )}
-            </main>
-        </div>
+        <ProjectProvider user={user}>
+            <AuthenticatedApp />
+        </ProjectProvider>
     );
 };
 

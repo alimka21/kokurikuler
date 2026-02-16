@@ -11,7 +11,7 @@ interface Props {
 }
 
 const AccountSettings: React.FC<Props> = ({ user }) => {
-  const [name, setName] = useState(user.name);
+  const [name, setName] = useState(user.name || '');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
 

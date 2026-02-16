@@ -2,17 +2,29 @@
 import { User } from '../types';
 
 export const mapSessionToUser = (sessionUser: any): User => {
-    // Extract metadata or use empty object if missing
+    // 1. Basic Validation - Auth User MUST exist
+    if (!sessionUser || !sessionUser.id) {
+        // Return null or throw handled error. 
+        // Throwing allows the caller to handle unauthenticated state.
+        throw new Error("Invalid Session Data");
+    }
+
+    // 2. Extract metadata safely (fallback to empty object)
     const meta = sessionUser.user_metadata || {};
     
-    // Return strictly typed User object with safe defaults
+    // 3. Construct Robust User Object (AppUser compliant)
+    // We strictly follow the rule: User = Supabase Auth (Base) + Profile (Optional)
     return {
         id: sessionUser.id,
-        email: sessionUser.email || '',
-        name: meta.name || sessionUser.email?.split('@')[0] || 'Pengguna',
-        school: meta.school || '',
-        role: meta.role || 'user', // Ensure role comes from metadata if set there
-        is_registered: true,
-        force_password_change: meta.force_password_change || false
+        email: sessionUser.email || '', // Email should exist on Auth user
+        
+        // Optional Fields - Do NOT assume they exist
+        name: meta.name || undefined,
+        school: meta.school || undefined,
+        role: meta.role || 'user', // Default to 'user', but type allows string
+        
+        // Extra state
+        force_password_change: meta.force_password_change === true,
+        created_at: sessionUser.created_at
     };
 };

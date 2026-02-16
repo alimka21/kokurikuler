@@ -10,14 +10,20 @@ export enum Dimension {
   COMMUNICATION = "Komunikasi"
 }
 
+// ARSITEKTUR ROBUST (AppUser Spec):
+// Semua field profil bersifat optional.
+// Role bersifat string flexible untuk mencegah crash jika metadata tidak konsisten.
 export interface User {
-  id: string;
-  email: string;
-  name: string;
-  school: string;
-  role: 'admin' | 'user';
+  id: string; // Mandatory (Auth ID)
+  email: string; // Mandatory (Auth Email)
+  
+  role?: string; // Optional string ('admin' | 'user' | undefined)
+  name?: string; // Optional
+  school?: string; // Optional
+  
+  // Metadata / State
   is_registered?: boolean; 
-  force_password_change?: boolean; // New flag for first-time login
+  force_password_change?: boolean; 
   created_at?: string;
 }
 

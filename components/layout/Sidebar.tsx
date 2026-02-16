@@ -110,14 +110,14 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, currentView, onChangeView, cu
                 <div className="flex items-center justify-between mb-3">
                      <div className="flex items-center gap-3">
                         <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-sm shadow-sm ${user.role === 'admin' ? 'bg-purple-600' : 'bg-slate-400'}`}>
-                            {user.name ? user.name.charAt(0) : 'U'}
+                            {user.name ? user.name.charAt(0) : (user.email ? user.email.charAt(0).toUpperCase() : 'U')}
                         </div>
                         <div className="overflow-hidden">
                             <div className="flex items-center gap-1">
-                                <p className="text-sm font-bold text-slate-900 truncate max-w-[120px]">{user.name || 'User'}</p>
+                                <p className="text-sm font-bold text-slate-900 truncate max-w-[120px]">{user.name || 'Pengguna'}</p>
                                 {user.role === 'admin' && <ShieldCheck className="w-3 h-3 text-purple-600" />}
                             </div>
-                            <p className="text-xs text-slate-500 truncate max-w-[120px]">{user.school || 'School Name'}</p>
+                            <p className="text-xs text-slate-500 truncate max-w-[120px]">{user.school || 'Sekolah Belum Diatur'}</p>
                         </div>
                     </div>
                 </div>
