@@ -5,8 +5,8 @@ import * as Gemini from '../services/geminiService';
 import { generateAndDownloadDocx, generateAnnualProgramDocx } from '../utils/docxGenerator';
 import { STEPS } from '../constants';
 import Swal from 'sweetalert2';
-import { supabase } from '../services/supabaseClient';
 import { saveDraft, loadDraft } from '../utils/sessionManager';
+import { ProjectRepository } from '../services/repository';
 
 export const useProjectWizard = (user: any) => {
     // Current active project being edited
@@ -51,7 +51,7 @@ export const useProjectWizard = (user: any) => {
     }, [project, currentStep]);
 
 
-    // --- SUPABASE INTEGRATION ---
+    // --- REPOSITORY INTEGRATION ---
     useEffect(() => {
         if (user?.email && user?.id !== 'emergency-admin-id') {
             fetchProjects();
@@ -60,60 +60,24 @@ export const useProjectWizard = (user: any) => {
 
     const fetchProjects = async () => {
         try {
-            const { data, error } = await supabase
-                .from('projects')
-                .select('*')
-                .eq('user_email', user.email)
-                .order('updated_at', { ascending: false });
-
-            if (error) {
-                if (error.code === '42P01' || error.message.includes('relation') || error.message.includes('schema')) {
-                    setSavedProjects([]);
-                    return;
-                }
-                return;
-            }
-
-            if (data) {
-                const mappedProjects = data.map((d: any) => {
-                    const content = d.content || {};
-                    return {
-                        ...INITIAL_PROJECT_STATE, 
-                        ...content,
-                        id: d.id, 
-                    };
-                });
-                setSavedProjects(mappedProjects);
-            }
+            const projects = await ProjectRepository.getProjectsByUser(user.email);
+            setSavedProjects(projects);
         } catch (e) {
-            // Silent catch
+            console.error("Failed to fetch projects", e);
+            // Fallback to empty if table doesn't exist yet
+            setSavedProjects([]);
         }
     };
 
-    const persistToSupabase = async (proj: ProjectState) => {
+    const persistToDatabase = async (proj: ProjectState) => {
         if (user.id === 'emergency-admin-id') return;
-
-        const payload = {
-            id: proj.id,
-            user_id: user.id, 
-            user_email: user.email, 
-            title: proj.title,
-            school_name: proj.schoolName,
-            phase: proj.phase,
-            target_class: proj.targetClass,
-            total_jp_annual: proj.totalJpAnnual,
-            project_jp_allocation: proj.projectJpAllocation,
-            selected_theme: proj.selectedTheme,
-            activity_format: proj.activityFormat,
-            analysis_summary: proj.analysisSummary,
-            content: proj,
-            updated_at: new Date().toISOString()
-        };
-
-        const { error } = await supabase.from('projects').upsert(payload);
-
-        if (!error) {
-            fetchProjects(); 
+        
+        try {
+            await ProjectRepository.saveProject(proj, { id: user.id, email: user.email });
+            fetchProjects();
+        } catch (e) {
+            console.error("Save failed", e);
+            throw e;
         }
     };
 
@@ -124,22 +88,24 @@ export const useProjectWizard = (user: any) => {
     const saveProject = async () => {
         const updatedProject = { ...project, lastUpdated: Date.now() };
         
+        // Optimistic UI Update
         setSavedProjects(prev => {
             const others = prev.filter(p => p.id !== project.id);
             return [...others, updatedProject];
         });
 
-        await persistToSupabase(updatedProject);
-        // Clear draft after successful save, but keep project loaded
-        // saveDraft('current_project', null); 
-
-        Swal.fire({
-            icon: 'success',
-            title: 'Tersimpan!',
-            text: `Projek "${project.selectedTheme || 'Draft'}" berhasil disimpan.`,
-            timer: 1500,
-            showConfirmButton: false
-        });
+        try {
+            await persistToDatabase(updatedProject);
+            Swal.fire({
+                icon: 'success',
+                title: 'Tersimpan!',
+                text: `Projek "${project.selectedTheme || 'Draft'}" berhasil disimpan.`,
+                timer: 1500,
+                showConfirmButton: false
+            });
+        } catch (e) {
+            Swal.fire('Error', 'Gagal menyimpan ke database cloud.', 'error');
+        }
     };
 
     const createNewProject = () => {
@@ -182,8 +148,12 @@ export const useProjectWizard = (user: any) => {
                 phase: newPhase,
                 lastUpdated: Date.now(),
             };
-            await persistToSupabase(newProject);
-            Swal.fire('Duplikasi Berhasil', `Projek disalin ke ${newClass}`, 'success');
+            try {
+                await persistToDatabase(newProject);
+                Swal.fire('Duplikasi Berhasil', `Projek disalin ke ${newClass}`, 'success');
+            } catch (e) {
+                Swal.fire('Gagal', 'Gagal menduplikasi projek.', 'error');
+            }
         }
     };
 

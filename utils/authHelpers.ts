@@ -14,6 +14,15 @@ export const mapSessionToUser = (sessionUser: any): User => {
     
     // 3. Construct Robust User Object (AppUser compliant)
     // We strictly follow the rule: User = Supabase Auth (Base) + Profile (Optional)
+    
+    // EMERGENCY OVERRIDE:
+    // Ensure specific email is ALWAYS admin immediately upon object creation.
+    // This prevents race conditions where the DB fetch is slower than the UI render.
+    let role = meta.role || 'user';
+    if (sessionUser.email === 'alimkamcl@gmail.com') {
+        role = 'admin';
+    }
+
     return {
         id: sessionUser.id,
         email: sessionUser.email || '', // Email should exist on Auth user
@@ -21,7 +30,7 @@ export const mapSessionToUser = (sessionUser: any): User => {
         // Optional Fields - Do NOT assume they exist
         name: meta.name || undefined,
         school: meta.school || undefined,
-        role: meta.role || 'user', // Default to 'user', but type allows string
+        role: role, 
         
         // Extra state
         force_password_change: meta.force_password_change === true,

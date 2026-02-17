@@ -3,7 +3,8 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import { User } from '../types';
 import { supabase } from '../services/supabaseClient';
 import { mapSessionToUser } from '../utils/authHelpers';
-import { saveSessionToCache, restoreSessionFromCache, clearSessionCache } from '../utils/sessionManager';
+import { saveSessionToCache, restoreSessionFromCache, clearAllAppStorage } from '../utils/sessionManager';
+import { UserRepository } from '../services/repository';
 
 interface AuthContextType {
     user: User | null;
@@ -39,30 +40,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 const baseUser = mapSessionToUser(sessionUser);
                 if (!cachedUser && mounted) setUser(baseUser);
 
-                // DB Hydration
-                if (supabase) {
-                    let dbProfile = null;
-                    try {
-                        const { data: profileById } = await supabase
-                            .from('users')
-                            .select('*')
-                            .eq('id', sessionUser.id)
-                            .maybeSingle(); 
-                        dbProfile = profileById;
-                    } catch (err) {
-                        console.warn("DB Profile Fetch Error:", err);
-                    }
+                // DB Hydration via Repository
+                let dbProfile = null;
+                try {
+                    dbProfile = await UserRepository.getCurrentProfile(sessionUser.id);
+                } catch (err) {
+                    console.warn("DB Profile Fetch Error:", err);
+                }
 
-                    if (mounted) {
-                        const mergedUser: User = {
-                            ...baseUser,
-                            ...(dbProfile || {}),
-                            id: baseUser.id,
-                            email: baseUser.email
-                        };
-                        setUser(mergedUser);
-                        saveSessionToCache(mergedUser);
-                    }
+                if (mounted) {
+                    const mergedUser: User = {
+                        ...baseUser,
+                        ...(dbProfile || {}),
+                        id: baseUser.id,
+                        email: baseUser.email
+                    };
+                    setUser(mergedUser);
+                    saveSessionToCache(mergedUser);
                 }
             } catch (e) {
                 console.error("Session Sync Error:", e);
@@ -81,13 +75,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                     await fetchAndSyncUser(session.user);
                 } else {
                     setUser(null);
-                    clearSessionCache();
+                    clearAllAppStorage(); // Ensure clean state if no session found
                 }
             } catch (e: any) {
                 console.error("Auth Init Error:", e);
                 if (!cachedUser) {
                     let msg = e.message || "Gagal memuat sesi.";
-                    if (msg.includes("NetworkError")) msg = "Koneksi internet bermasalah.";
+                    const lowerMsg = msg.toLowerCase();
+                    
+                    // Handle network/fetch errors gracefully
+                    if (
+                        lowerMsg.includes("networkerror") || 
+                        lowerMsg.includes("failed to fetch") || 
+                        lowerMsg.includes("load failed") ||
+                        lowerMsg.includes("connection refused")
+                    ) {
+                        msg = "Koneksi ke server gagal. Mohon periksa koneksi internet Anda.";
+                    }
+                    
                     setConnectionError(msg);
                 }
             } finally {
@@ -102,7 +107,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                  await fetchAndSyncUser(session.user);
              } else if (event === 'SIGNED_OUT') {
                  setUser(null);
-                 clearSessionCache();
+                 clearAllAppStorage();
              }
         });
 
@@ -118,7 +123,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
 
     const logout = async () => {
-        clearSessionCache();
+        clearAllAppStorage(); // Wipes user session + Project Drafts
         await supabase.auth.signOut();
         setUser(null);
     };

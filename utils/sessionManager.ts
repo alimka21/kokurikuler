@@ -49,10 +49,18 @@ export const restoreSessionFromCache = (): User | null => {
 };
 
 /**
- * Clear session cache
+ * Clear session cache AND Drafts (Full Cleanup)
  */
-export const clearSessionCache = () => {
+export const clearAllAppStorage = () => {
+    // 1. Clear User Session
     localStorage.removeItem(STORAGE_KEY);
+    
+    // 2. Clear Project Wizard Drafts
+    localStorage.removeItem('draft_current_project');
+    localStorage.removeItem('draft_current_step');
+    
+    // 3. Clear any other potential leftovers
+    // (Optional: clear Supabase local storage if needed, though signOut handles it mostly)
 };
 
 /**

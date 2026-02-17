@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from '../services/supabaseClient';
 import { createClient } from '@supabase/supabase-js'; // Import createClient for temp instance
 import { User } from '../types';
+import { UserRepository, SettingsRepository } from '../services/repository';
 import { 
   Users, 
   FolderOpen, 
@@ -45,36 +46,18 @@ const AdminDashboard: React.FC = () => {
   }, []);
 
   const fetchSettings = async () => {
-      try {
-          const { data, error } = await supabase
-              .from('system_settings')
-              .select('value')
-              .eq('key', 'subscription_url')
-              .single();
-          
-          if (data) {
-              setSubscriptionUrl(data.value);
-          } else {
-              setSubscriptionUrl('https://s.id/alimkadigital/');
-          }
-      } catch (e) {
-          setSubscriptionUrl('https://s.id/alimkadigital/');
-      }
+      const url = await SettingsRepository.getUrl();
+      setSubscriptionUrl(url);
   };
 
   const saveSettings = async () => {
       setLoadingSettings(true);
       try {
-          // Try to insert/update. This requires a table 'system_settings' with columns 'key' (PK) and 'value'.
-          const { error } = await supabase
-            .from('system_settings')
-            .upsert({ key: 'subscription_url', value: subscriptionUrl });
-            
-          if (error) throw error;
+          await SettingsRepository.setUrl(subscriptionUrl);
           Swal.fire('Tersimpan', 'Link langganan berhasil diperbarui.', 'success');
       } catch (e: any) {
           console.error(e);
-          Swal.fire('Gagal', 'Gagal menyimpan pengaturan. Pastikan tabel system_settings ada.', 'error');
+          Swal.fire('Gagal', 'Gagal menyimpan pengaturan.', 'error');
       } finally {
           setLoadingSettings(false);
       }
@@ -83,31 +66,13 @@ const AdminDashboard: React.FC = () => {
   const fetchData = async () => {
     setLoading(true);
     try {
-      // 1. Get Stats (Safe Fetch)
-      let userCount = 0;
-      let projectCount = 0;
-      
-      try {
-          const { count, error } = await supabase.from('users').select('*', { count: 'exact', head: true });
-          if (!error) userCount = count || 0;
-      } catch (e) {}
+      // 1. Get Stats via Repository
+      const statsData = await UserRepository.getStats();
+      setStats(statsData);
 
-      try {
-          const { count, error } = await supabase.from('projects').select('*', { count: 'exact', head: true });
-          if (!error) projectCount = count || 0;
-      } catch (e) {}
-      
-      setStats({ users: userCount, projects: projectCount });
-
-      // 2. Get Users List
-      const { data, error } = await supabase.from('users').select('*').order('created_at', { ascending: false });
-      if (error) {
-          if (!error.message.includes('relation') && !error.message.includes('schema')) {
-              throw error;
-          }
-      } else {
-          setUsers(data as User[]);
-      }
+      // 2. Get Users List via Repository
+      const usersData = await UserRepository.getAllUsers();
+      setUsers(usersData);
     } catch (error: any) {
       console.error("Error fetching admin data:", error);
     } finally {
@@ -126,12 +91,12 @@ const AdminDashboard: React.FC = () => {
     });
 
     if (result.isConfirmed) {
-      const { error } = await supabase.from('users').delete().eq('id', id);
-      if (error) {
-        Swal.fire('Gagal', 'Terjadi kesalahan saat menghapus.', 'error');
-      } else {
+      try {
+        await UserRepository.deleteUser(id);
         Swal.fire('Terhapus', 'User berhasil dihapus.', 'success');
         fetchData();
+      } catch (e) {
+        Swal.fire('Gagal', 'Terjadi kesalahan saat menghapus.', 'error');
       }
     }
   };
@@ -171,7 +136,6 @@ const AdminDashboard: React.FC = () => {
     try {
       if (!editingUser.id) {
           // --- CREATE NEW USER FLOW ---
-          
           // Use a temporary, non-persisting Supabase client.
           const envUrl = getEnv('VITE_SUPABASE_URL');
           const envKey = getEnv('VITE_SUPABASE_ANON_KEY');
@@ -215,33 +179,25 @@ const AdminDashboard: React.FC = () => {
                  window.location.hash = '#/projects';
              });
              
-             // Manually sync to public users table immediately to reflect in Admin UI
-             await supabase.from('users').upsert({
+             // Sync using Repository
+             await UserRepository.upsertUser({
                  id: data.user.id,
                  email: data.user.email,
                  name: editingUser.name,
                  school: editingUser.school,
-                 role: editingUser.role,
-                 updated_at: new Date().toISOString()
+                 role: editingUser.role
              });
           }
 
       } else {
           // --- EDIT EXISTING USER FLOW ---
-          const payload = {
-            ...editingUser,
-            email: editingUser.email.trim().toLowerCase(),
-            updated_at: new Date().toISOString()
-          };
+          await UserRepository.upsertUser({
+              ...editingUser,
+              email: editingUser.email?.trim().toLowerCase()
+          });
 
-          const { error } = await supabase
-            .from('users')
-            .upsert(payload) 
-            .select();
-
-          if (error) throw error;
           Swal.fire('Sukses', 'Data user berhasil disimpan.', 'success');
-          fetchData(); // Only refresh list if staying on page
+          fetchData(); 
       }
 
       setIsModalOpen(false);
@@ -260,10 +216,10 @@ const AdminDashboard: React.FC = () => {
   );
 
   return (
-    <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700 pb-20">
+    <div className="w-full max-w-7xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700 py-6 px-4 sm:px-6">
       
       {/* Header */}
-      <div className="bg-slate-900 text-white p-8 rounded-3xl shadow-lg space-y-6">
+      <div className="bg-slate-900 text-white p-8 rounded-3xl shadow-xl space-y-6">
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
             <div>
               <div className="flex items-center gap-3 mb-2">
@@ -276,11 +232,11 @@ const AdminDashboard: React.FC = () => {
             </div>
 
             <button 
-                onClick={() => window.location.hash = '#/dashboard'}
-                className="bg-primary hover:bg-primary-hover text-white px-6 py-3 rounded-xl font-bold transition-all shadow-lg shadow-primary/20 flex items-center gap-2 group"
+                onClick={() => window.location.hash = '#/projects'}
+                className="bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700 text-white px-6 py-3 rounded-xl font-bold transition-all shadow-lg shadow-orange-500/30 flex items-center gap-2 group transform hover:-translate-y-0.5 border-none"
             >
-                <LayoutDashboard className="w-5 h-5" /> 
-                Buat Projek (Aplikasi Utama)
+                <FolderOpen className="w-5 h-5" /> 
+                Halaman Projek
             </button>
         </div>
         

@@ -4,6 +4,7 @@ import { useAuth } from './contexts/AuthContext';
 import { ProjectProvider, useProject } from './contexts/ProjectContext';
 import { STEPS } from './constants';
 import { NotificationToast, NotificationType } from './components/common/UiKit';
+import Swal from 'sweetalert2';
 
 // View Components
 import Dashboard from './components/Dashboard';
@@ -33,7 +34,6 @@ import { ChevronRight, ChevronLeft, Save, AlertTriangle, WifiOff } from 'lucide-
 type ViewMode = 'dashboard' | 'projects' | 'wizard' | 'editor' | 'identity' | 'admin' | 'account';
 
 // --- SUB-COMPONENT: The Authenticated Layout & Routing ---
-// This component is only rendered when User is present and ProjectProvider is active
 const AuthenticatedApp: React.FC = () => {
     const { user, logout, updateUser } = useAuth();
     const { 
@@ -65,35 +65,67 @@ const AuthenticatedApp: React.FC = () => {
         };
     }, []);
 
-    // Hash Routing Logic
+    // --- ROUTING ENGINE ---
     useEffect(() => {
         if (!user) return;
+
         const handleHashChange = () => {
-            const hash = window.location.hash.replace('#/', '');
-            if (hash === 'admin') {
-                if (user.role === 'admin') setView('admin');
-                else {
-                    setView('dashboard');
-                    window.location.hash = '#/dashboard';
+            // Robust hash parsing
+            const hash = window.location.hash.replace(/^#\/?/, '');
+
+            // 1. Admin Routing Priority
+            if (user.role === 'admin') {
+                if (hash === 'admin') {
+                    setView('admin');
+                    return;
+                }
+                // Redirect admin to admin panel if they are on root or standard dashboard
+                if (hash === '' || hash === 'dashboard') {
+                    window.location.hash = '#/admin';
+                    return;
                 }
             }
-            else if (hash === 'projects') setView('projects');
+
+            // 2. Protect Admin Route from Non-Admins
+            if (hash === 'admin' && user.role !== 'admin') {
+                setView('dashboard');
+                window.location.hash = '#/dashboard';
+                return;
+            }
+
+            // 3. Standard Routing
+            if (hash === 'projects') setView('projects');
             else if (hash === 'wizard') setView('wizard');
             else if (hash === 'editor') setView('editor');
             else if (hash === 'settings') setView('identity');
             else if (hash === 'account') setView('account');
-            else setView('dashboard');
+            else if (hash === 'dashboard') setView('dashboard');
+            else if (hash === 'admin') setView('admin'); // Valid admin case
+            else {
+                // Fallback
+                if (user.role === 'admin') {
+                    window.location.hash = '#/admin';
+                } else {
+                    setView('dashboard');
+                    if (hash !== 'dashboard') window.location.hash = '#/dashboard';
+                }
+            }
         };
+
+        // Run immediately on mount
         handleHashChange();
+        
+        // Listen for changes
         window.addEventListener('hashchange', handleHashChange);
         return () => window.removeEventListener('hashchange', handleHashChange);
-    }, [user?.role]);
+    }, [user, user?.role]); 
 
-    // Sync View to Hash
+    // Sync View State changes back to URL Hash
     useEffect(() => {
         if (!user) return;
-        const hash = window.location.hash.replace('#/', '');
+        const hash = window.location.hash.replace(/^#\/?/, '');
         let targetHash = 'dashboard';
+
         if (view === 'admin') targetHash = 'admin';
         else if (view === 'projects') targetHash = 'projects';
         else if (view === 'wizard') targetHash = 'wizard';
@@ -102,6 +134,7 @@ const AuthenticatedApp: React.FC = () => {
         else if (view === 'account') targetHash = 'account';
 
         if (hash !== targetHash) {
+            if (targetHash === 'admin' && user.role !== 'admin') return;
             window.location.hash = `/${targetHash}`;
         }
     }, [view, user]);
@@ -117,9 +150,53 @@ const AuthenticatedApp: React.FC = () => {
     };
 
     const handleLogout = async () => {
-        await logout();
-        setView('dashboard');
+        // Confirmation before logout to prevent data loss
+        const result = await Swal.fire({
+            title: 'Keluar Aplikasi?',
+            text: "Pastikan Anda sudah menyimpan projek yang sedang dikerjakan.",
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonColor: '#d33',
+            cancelButtonColor: '#3085d6',
+            confirmButtonText: 'Ya, Keluar',
+            cancelButtonText: 'Batal'
+        });
+
+        if (result.isConfirmed) {
+            await logout();
+            setView('dashboard');
+            window.location.hash = '';
+        }
     };
+
+    // --- RENDER LOGIC ---
+
+    if (user?.force_password_change) {
+        return <ForcePasswordChange onSuccess={() => updateUser({ ...user, force_password_change: false })} />;
+    }
+
+    // SPECIAL CASE: Standalone Admin Dashboard
+    if (view === 'admin' && user?.role === 'admin') {
+        return (
+            <div className="min-h-screen bg-slate-50 font-sans text-slate-900">
+                <AdminDashboard />
+                {/* Floating Logout for Admin Standalone View */}
+                <button 
+                    onClick={handleLogout}
+                    className="fixed bottom-6 right-6 bg-white text-slate-600 px-4 py-2 rounded-lg shadow-lg border border-slate-200 hover:bg-red-50 hover:text-red-600 hover:border-red-200 transition-all text-xs font-bold"
+                >
+                    Keluar
+                </button>
+            </div>
+        );
+    }
+
+    let headerTitle = "Overview";
+    if (view === 'editor') headerTitle = "Document Editor";
+    else if (view === 'projects') headerTitle = "Library & Projek";
+    else if (view === 'identity') headerTitle = "Pengaturan Data Sekolah";
+    else if (view === 'account') headerTitle = "Pengaturan Akun";
+    else if (view === 'wizard') headerTitle = STEPS[currentStep].title;
 
     const renderStepContent = () => {
         switch (currentStep + 1) {
@@ -133,19 +210,6 @@ const AuthenticatedApp: React.FC = () => {
             default: return null;
         }
     };
-
-    let headerTitle = "Overview";
-    if (view === 'editor') headerTitle = "Document Editor";
-    else if (view === 'projects') headerTitle = "Library & Projek";
-    else if (view === 'identity') headerTitle = "Pengaturan Data Sekolah";
-    else if (view === 'account') headerTitle = "Pengaturan Akun";
-    else if (view === 'admin') headerTitle = "Admin Dashboard";
-    else if (view === 'wizard') headerTitle = STEPS[currentStep].title;
-
-    // Check for Force Password Change
-    if (user?.force_password_change) {
-        return <ForcePasswordChange onSuccess={() => updateUser({ ...user, force_password_change: false })} />;
-    }
 
     return (
         <div className="flex h-screen overflow-hidden bg-background-light font-sans text-slate-900">
@@ -169,7 +233,6 @@ const AuthenticatedApp: React.FC = () => {
                     {view === 'projects' && <MyProjects onNewProject={handleStartProject} savedProjects={savedProjects} onLoadProject={handleLoadProject} onDuplicateProject={duplicateProject} />}
                     {view === 'identity' && <IdentitySettings project={project} onChange={updateProject} onSave={() => showNotify('Data Sekolah berhasil disimpan!', 'success')} />}
                     {view === 'account' && <AccountSettings user={user!} />}
-                    {view === 'admin' && user!.role === 'admin' && <AdminDashboard />}
                     {view === 'wizard' && (
                         <div className="max-w-5xl mx-auto pb-32">
                             <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">

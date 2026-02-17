@@ -22,12 +22,8 @@ const getEnv = (key: string) => {
     return '';
 };
 
-// Support both Vite import.meta.env and standard process.env
 const apiKey = getEnv('VITE_GEMINI_API_KEY') || getEnv('API_KEY'); 
 
-// Initialize AI Client Safely
-// We do not throw here to prevent the entire app from crashing on load if the key is missing.
-// Instead, we handle the missing key inside the specific API functions.
 let ai: GoogleGenAI | null = null;
 try {
     if (apiKey && apiKey.trim().length > 0) {
@@ -37,438 +33,298 @@ try {
     console.error("Failed to initialize Gemini Client:", e);
 }
 
-const MODEL_NAME = 'gemini-2.5-flash-preview'; // Updated to valid model from guidelines
+const MODEL_NAME = 'gemini-2.5-flash-preview'; 
 
 const SYSTEM_INSTRUCTION = `
-Anda adalah Ahli Kokurikuler (Kurikulum Nasional). 
+Anda adalah Ahli Kokurikuler (Kurikulum Nasional) & Instructional Designer Senior.
 Tugas Anda membantu guru menyusun dokumen Kokurikuler.
 Gunakan istilah "Kokurikuler" dan "Dimensi Profil Lulusan".
-Bahasa Indonesia formal dan pedagogis.
+Bahasa Indonesia formal, pedagogis, namun praktis.
+
+ATURAN STRICT (SELF-CORRECTION):
+1. Jangan pernah memberikan output kosong.
+2. Pastikan format JSON valid (tanpa trailing comma).
+3. Pastikan logika konsisten (misal: Total JP aktivitas = Total Alokasi).
 `;
 
-// Helper to detect specific API errors
+// --- CORE: SELF-CORRECTION UTILITIES ---
+
+// 1. Helper to clean markdown JSON fences
+const cleanJson = (text: string): string => {
+    if (!text) return "[]";
+    // Remove ```json and ``` fences
+    let cleaned = text.replace(/^```json\s*/, "").replace(/^```\s*/, "").replace(/\s*```$/, "");
+    return cleaned.trim();
+};
+
+// 2. The Verification Loop Engine
+async function generateWithRetry<T>(
+    operationName: string,
+    prompt: string,
+    validator: (data: any) => { isValid: boolean; error?: string },
+    config: any = {},
+    maxRetries = 3
+): Promise<T | null> {
+    
+    checkAI();
+    let currentPrompt = prompt;
+    let attempts = 0;
+
+    while (attempts < maxRetries) {
+        try {
+            console.log(`[AI-Agent] ${operationName} - Attempt ${attempts + 1}`);
+            
+            const response = await ai!.models.generateContent({
+                model: MODEL_NAME,
+                contents: currentPrompt,
+                config: {
+                    systemInstruction: SYSTEM_INSTRUCTION,
+                    ...config
+                }
+            });
+
+            const textOutput = response.text || "";
+            
+            // A. JSON Parsing Attempt
+            let parsedData: any;
+            try {
+                if (config.responseMimeType === "application/json") {
+                    parsedData = JSON.parse(cleanJson(textOutput));
+                } else {
+                    // For text-only responses, we treat the text itself as data
+                    parsedData = textOutput; 
+                }
+            } catch (jsonError) {
+                throw new Error("INVALID_JSON_FORMAT");
+            }
+
+            // B. Logical Validation (The "Consistency Check")
+            const validation = validator(parsedData);
+            
+            if (validation.isValid) {
+                return parsedData as T;
+            } else {
+                // Validation Failed
+                throw new Error(`LOGIC_ERROR: ${validation.error}`);
+            }
+
+        } catch (error: any) {
+            attempts++;
+            const msg = error.message || "Unknown Error";
+            console.warn(`[AI-Agent] Correction triggered: ${msg}`);
+
+            // If we run out of retries, throw or return fallback
+            if (attempts >= maxRetries) {
+                console.error(`[AI-Agent] Failed after ${maxRetries} attempts.`);
+                // If specific API error, throw it up
+                handleGeminiError(error);
+                return null; 
+            }
+
+            // FEEDBACK LOOP: Append the error to the prompt so the AI can fix it
+            currentPrompt += `\n\n[SYSTEM ERROR]: Output sebelumnya SALAH. \nError: ${msg}. \nPerbaiki kesalahan ini dan generate ulang JSON yang valid.`;
+        }
+    }
+    return null;
+}
+
 const handleGeminiError = (error: any) => {
     const msg = error?.toString() || "";
-    // Check for Quota Exceeded / Rate Limit
     if (msg.includes("429") || msg.includes("Resource has been exhausted") || msg.includes("Quota exceeded")) {
         throw new Error("QUOTA_EXCEEDED");
     }
-    // Check for Invalid API Key
     if (msg.includes("API_KEY") || msg.includes("403") || msg.includes("400") || msg.includes("INVALID_ARGUMENT")) {
         throw new Error("INVALID_API_KEY");
     }
-    throw error;
+    // Don't re-throw logic errors from the loop, just log them
 };
 
-// Check availability helper
 const checkAI = () => {
     if (!ai) throw new Error("INVALID_API_KEY");
 };
 
+// --- IMPLEMENTATION ---
+
 export const analyzeSchoolContext = async (text: string): Promise<string> => {
   if (!text) return "Tidak ada data.";
   
-  try {
-    checkAI();
-    const response = await ai!.models.generateContent({
-      model: MODEL_NAME,
-      contents: `Data Refleksi Sekolah:
-      ${text}
-      
-      Tugas: Lakukan analisis mendalam untuk menyusun "Insight Strategis" sebagai fondasi modul projek.
-      
-      Gunakan METODE BERIKUT secara berurutan:
-      1. Identifikasi Ide Inti (Core Idea Extraction) dari data mentah.
-      2. Pengelompokan Tematik (Thematic Clustering) antara potensi murid, sumber daya, dan isu sosial.
-      3. Generalisasi Informasi (Abstraction) menjadi gambaran utuh kondisi sekolah.
-      4. Eliminasi Redundansi (Hapus pengulangan poin).
-      5. Sintesis → Rekomendasi (Hubungkan kondisi nyata dengan kebutuhan pengembangan karakter).
+  const prompt = `Data Refleksi Sekolah: ${text}
+  Tugas: Lakukan analisis mendalam "Insight Strategis".
+  Metode: Core Idea -> Clustering -> Abstraction -> Synthesis.
+  Output: 2-3 paragraf naratif kohesif. TANPA simbol asterisk (*), TANPA bullet points.`;
 
-      ATURAN FORMAT OUTPUT (STRICT):
-      - Tulis dalam 2-3 paragraf naratif yang mengalir (Cohesive Narrative).
-      - DILARANG KERAS menggunakan simbol asterisk (*), tanda bintang, bullet points, atau numbering.
-      - DILARANG menggunakan format bold/italic markdown.
-      - Jangan menyalin ulang data mentah, tapi jelaskan "artinya" bagi pembelajaran.
-      - Gunakan bahasa profesional, empatik, dan solutif.`,
-      config: { systemInstruction: SYSTEM_INSTRUCTION }
-    });
-    return response.text || "Gagal menganalisis.";
-  } catch (error) {
-    handleGeminiError(error);
-    return "Terjadi kesalahan.";
-  }
+  // FIXED: Now using generateWithRetry for consistency and robustness
+  const result = await generateWithRetry<string>(
+      "Context Analysis",
+      prompt,
+      (data) => {
+          if (typeof data !== 'string') return { isValid: false, error: "Output bukan teks" };
+          // Validation: Ensure AI actually wrote something substantial
+          if (data.length < 50) return { isValid: false, error: "Analisis terlalu pendek/gagal" };
+          return { isValid: true };
+      },
+      { responseMimeType: "text/plain" }
+  );
+
+  return result || "Gagal menganalisis konteks. Silakan coba lagi.";
 };
 
 export const recommendDimensions = async (analysis: string): Promise<Dimension[]> => {
-  try {
-    checkAI();
-     const response = await ai!.models.generateContent({
-      model: MODEL_NAME,
-      contents: `Berdasarkan analisis konteks sekolah ini: "${analysis}"
-      
-      Pilih 3 "Dimensi Profil Lulusan" yang paling relevan untuk dikuatkan.
-      Pilihan tersedia:
-      - Keimanan dan Ketakwaan kepada Tuhan YME
-      - Kewargaan (Global/Lokal)
-      - Penalaran Kritis
-      - Kreativitas
-      - Kolaborasi
-      - Kemandirian
-      - Kesehatan
-      - Komunikasi
+    const prompt = `Analisis konteks: "${analysis}"
+    Pilih 3 "Dimensi Profil Lulusan" yang paling relevan.
+    Pilihan Valid: [Keimanan dan Ketakwaan kepada Tuhan YME, Kewargaan (Global/Lokal), Penalaran Kritis, Kreativitas, Kolaborasi, Kemandirian, Kesehatan, Komunikasi].
+    Output: JSON Array string.`;
 
-      Output: JSON Array string nama dimensi.`,
-      config: {
-        systemInstruction: SYSTEM_INSTRUCTION,
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.ARRAY,
-          items: { type: Type.STRING }
-        }
-      }
-    });
-    const jsonStr = response.text || "[]";
-    return JSON.parse(jsonStr);
-  } catch (e) {
-    handleGeminiError(e);
-    return [];
-  }
+    const result = await generateWithRetry<Dimension[]>(
+        "Recommend Dimensions",
+        prompt,
+        (data) => {
+            if (!Array.isArray(data)) return { isValid: false, error: "Output bukan Array" };
+            if (data.length === 0) return { isValid: false, error: "Array kosong" };
+            // Optional: Check if strings match enum
+            return { isValid: true };
+        },
+        { responseMimeType: "application/json" }
+    );
+
+    return result || [];
 };
 
 export const recommendThemes = async (analysis: string, dimensions: Dimension[]): Promise<ThemeOption[]> => {
-  try {
-    checkAI();
-    const response = await ai!.models.generateContent({
-      model: MODEL_NAME,
-      contents: `Berdasarkan analisis konteks: "${analysis}" 
-      dan dimensi terpilih: "${dimensions.join(', ')}".
-      
-      Tugas: Pilih dan urutkan 3 Tema Kokurikuler yang paling relevan dari daftar referensi di bawah ini.
-      
-      DAFTAR REFERENSI TEMA:
-      1. Generasi sehat dan bugar
-      2. Peduli dan berbagi
-      3. Aku cinta Indonesia
-      4. Hidup hemat dan produktif
-      5. Berkarya untuk sesama dan bangsa
-      6. Gaya hidup berkelanjutan
-      7. Kearifan Lokal
-      8. Bhinneka Tunggal Ika
-      9. Berekayasa dan Berteknologi untuk Membangun NKRI
-      10. Kewirausahaan
-      
-      Output JSON format: [{ "name": "Nama Tema (sesuai daftar)", "reason": "Alasan singkat mengapa tema ini cocok dengan analisis..." }]`,
-      config: {
-        systemInstruction: SYSTEM_INSTRUCTION,
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.ARRAY,
-          items: {
-            type: Type.OBJECT,
-            properties: {
-              name: { type: Type.STRING },
-              reason: { type: Type.STRING }
-            }
-          }
-        }
-      }
-    });
-    
-    const jsonStr = response.text || "[]";
-    return JSON.parse(jsonStr);
-  } catch (error) {
-    handleGeminiError(error);
-    return [
+    const prompt = `Analisis: "${analysis}". Dimensi: "${dimensions.join(', ')}".
+    Pilih 3 Tema Kokurikuler relevan (misal: Gaya Hidup Berkelanjutan, Kearifan Lokal, Kewirausahaan, dll).
+    Output JSON: [{ "name": "Nama Tema", "reason": "Alasan singkat" }]`;
+
+    const result = await generateWithRetry<ThemeOption[]>(
+        "Recommend Themes",
+        prompt,
+        (data) => {
+            if (!Array.isArray(data)) return { isValid: false, error: "Output bukan Array" };
+            if (data.length === 0) return { isValid: false, error: "Array kosong" };
+            if (!data[0].name || !data[0].reason) return { isValid: false, error: "Format objek salah (butuh name & reason)" };
+            return { isValid: true };
+        },
+        { responseMimeType: "application/json" }
+    );
+
+    return result || [
         { name: "Kearifan Lokal", reason: "Fallback default." },
         { name: "Gaya hidup berkelanjutan", reason: "Fallback default." }
     ];
-  }
 };
 
 export const generateCreativeIdeas = async (theme: string, format: string, analysis: string): Promise<CreativeIdeaOption[]> => {
-    try {
-        checkAI();
-        // Optimize context length
-        const safeAnalysis = analysis ? analysis.substring(0, 2000) : "Sekolah Menengah";
-
-        const response = await ai!.models.generateContent({
-            model: MODEL_NAME,
-            contents: `
-            BERTINDAKLAH SEBAGAI: Creative Director Program Pendidikan.
-            
-            TUGAS:
-            Rancang 3 (tiga) konsep nama projek kokurikuler yang KREATIF, UNIK, dan MENARIK (Catchy) untuk siswa.
-            
-            KONTEKS PROJEK:
-            - Tema Besar: "${theme}"
-            - Bentuk Kegiatan: "${format}"
-            - Insight Sekolah: "${safeAnalysis}"
-            
-            KETENTUAN JUDUL (TITLE):
-            1. WAJIB berupa AKRONIM UNIK atau SINGKATAN MENARIK.
-            2. Contoh: 
-               - "GELAS (Gerakan Lawan Sampah)"
-               - "SABER (Sapu Bersih Lingkungan)"
-               - "KREATIF (Kreasi Edukatif Siswa Aktif)"
-               - "JEJAK (Jelajah Jajanan Lokal Kita)"
-            3. HINDARI judul membosankan seperti "Projek Tema Gaya Hidup" atau "Kegiatan P5".
-            
-            KETENTUAN DESKRIPSI:
-            1. Buat narasi singkat (2-3 kalimat) yang menjual dan persuasif.
-            2. Jelaskan aktivitas utamanya secara konkret.
-            
-            OUTPUT WAJIB JSON ARRAY:
-            [{ "title": "AKRONIM: Kepanjangan", "description": "Narasi menarik..." }]
-            `,
-            config: {
-                temperature: 0.85, // Higher creativity
-                topK: 40,
-                responseMimeType: "application/json",
-                responseSchema: {
-                    type: Type.ARRAY,
-                    items: {
-                        type: Type.OBJECT,
-                        properties: {
-                            title: { type: Type.STRING, description: "Judul projek berupa akronim/singkatan unik. Contoh: 'GELAS: Gerakan Lawan Sampah'" },
-                            description: { type: Type.STRING, description: "Deskripsi singkat dan menarik tentang kegiatan projek." }
-                        },
-                        required: ["title", "description"]
-                    }
-                }
-            }
-        });
-        
-        const jsonStr = response.text || "[]";
-        const result = JSON.parse(jsonStr);
-        
-        // Fallback checks
-        if (!Array.isArray(result) || result.length === 0) {
-            console.warn("AI returned empty ideas");
-            return [];
-        }
-        return result;
-    } catch (e) {
-        handleGeminiError(e);
-        console.error("AI Generate Ideas Error:", e);
-        return [];
-    }
-}
-
-export const draftProjectGoals = async (theme: string, dimensions: Dimension[], format: string): Promise<ProjectGoal[]> => {
-  try {
-    checkAI();
-    let additionalInstruction = "";
-
-    if (format === "Kolaboratif Lintas Disiplin Ilmu") {
-        additionalInstruction = `
-        KONTEKS BENTUK: Kolaboratif Lintas Disiplin Ilmu.
-        SYARAT WAJIB 'subjects':
-        - WAJIB berisi minimal 2 nama MATA PELAJARAN MURNI.
-        - Contoh yang BENAR: ["Matematika", "IPA", "IPS", "Bahasa Indonesia", "Seni Budaya", "PJOK"].
-        - DILARANG mengisi dengan karakter atau sikap (Jangan tulis "Mandiri", "Gotong Royong" di field subjects).
-        `;
-    } else if (format === "Gerakan 7 KAIH") {
-        additionalInstruction = `
-        KONTEKS KHUSUS: Gerakan 7 KAIH.
-        SYARAT 'subjects':
-        - Isi dengan ["Pendidikan Karakter", "Budi Pekerti", "PAI", "PPKn"].
-        `;
-    } else {
-        additionalInstruction = `
-        SYARAT 'subjects':
-        - Isi dengan mata pelajaran relevan atau ["Kokurikuler", "Pengembangan Diri"].
-        `;
-    }
-
+    const safeAnalysis = analysis ? analysis.substring(0, 1500) : "Sekolah Menengah";
     const prompt = `
-      Bertindaklah sebagai Konsultan Kurikulum Profesional.
-      Tugas: Rumuskan 3-4 "Tujuan Projek" yang spesifik untuk tema "${theme}".
-
-      DEFINISI PEDAGOGIS:
-      Tujuan Projek menggabungkan kompetensi (${dimensions.join(', ')}) dengan konten tema "${theme}".
-
-      FORMULA KALIMAT TUJUAN:
-      "Murid mampu [KATA KERJA] [KONTEN] melalui [METODE]."
-      
-      PENTING TENTANG 'subjects' (Mata Pelajaran):
-      ${additionalInstruction}
-
-      Output JSON Array: [{ "id": "1", "description": "Murid mampu...", "subjects": ["Mapel A", "Mapel B"] }]
+    Role: Creative Director.
+    Tema: "${theme}", Bentuk: "${format}", Insight: "${safeAnalysis}".
+    Tugas: 3 Judul Projek berupa AKRONIM UNIK (Contoh: "GELAS: Gerakan Lawan Sampah").
+    Output JSON: [{ "title": "AKRONIM: Judul", "description": "Narasi menarik..." }]
     `;
 
-    const response = await ai!.models.generateContent({
-      model: MODEL_NAME,
-      contents: prompt,
-      config: { 
-        systemInstruction: SYSTEM_INSTRUCTION,
-        responseMimeType: "application/json",
-        responseSchema: {
-            type: Type.ARRAY,
-            items: {
-                type: Type.OBJECT,
-                properties: {
-                    id: { type: Type.STRING },
-                    description: { type: Type.STRING },
-                    subjects: { type: Type.ARRAY, items: { type: Type.STRING } }
-                }
-            }
-        }
-      }
-    });
-    
-    const jsonStr = response.text || "[]";
-    return JSON.parse(jsonStr);
-  } catch (error) {
-    handleGeminiError(error);
-    console.error(error);
-    return [];
-  }
+    const result = await generateWithRetry<CreativeIdeaOption[]>(
+        "Creative Ideas",
+        prompt,
+        (data) => {
+            if (!Array.isArray(data)) return { isValid: false, error: "Output bukan Array" };
+            if (data.length < 1) return { isValid: false, error: "Tidak ada ide yang dihasilkan" };
+            return { isValid: true };
+        },
+        { responseMimeType: "application/json", temperature: 0.9 }
+    );
+
+    return result || [];
 };
 
+export const draftProjectGoals = async (theme: string, dimensions: Dimension[], format: string): Promise<ProjectGoal[]> => {
+    const prompt = `
+    Tema: "${theme}". Dimensi: ${dimensions.join(', ')}. Format: ${format}.
+    Tugas: Rumuskan 3-4 Tujuan Projek.
+    Aturan: Subject (Mapel) harus relevan.
+    Output JSON: [{ "id": "1", "description": "Murid mampu...", "subjects": ["Mapel A", "Mapel B"] }]
+    `;
+
+    const result = await generateWithRetry<ProjectGoal[]>(
+        "Draft Goals",
+        prompt,
+        (data) => {
+            if (!Array.isArray(data)) return { isValid: false, error: "Output bukan Array" };
+            if (data.length === 0) return { isValid: false, error: "Data kosong" };
+            return { isValid: true };
+        },
+        { responseMimeType: "application/json" }
+    );
+    
+    return result || [];
+};
+
+// --- CRITICAL: Activity Planning with Math Consistency Check ---
 export const generateActivityPlan = async (totalJp: number, theme: string, goals: ProjectGoal[], format: string): Promise<Activity[]> => {
-  try {
-    checkAI();
-    let contextInstruction = "";
-    if (format === "Kolaboratif Lintas Disiplin Ilmu") {
-        contextInstruction = "Konteks: Kolaborasi Lintas Mapel. Tunjukkan keterhubungan skill antar mapel dalam aktivitas.";
-    } else if (format === "Gerakan 7 KAIH") {
-        contextInstruction = `
-        KONTEKS KHUSUS: Gerakan 7 KAIH.
-        ATURAN KHUSUS: WAJIB menyertakan aktivitas pembiasaan berulang (monitoring jurnal/tantangan) selama beberapa JP.
-        `;
-    }
+    const goalsText = goals.map(g => `- ${g.description}`).join('\n');
+    
+    const prompt = `
+    Peran: Ahli Kurikulum.
+    Tugas: Susun "Alur Aktivitas Kokurikuler".
+    
+    CONSTRAINT (PENTING):
+    1. Total JP Aktivitas WAJIB sama persis dengan ${totalJp} JP.
+    2. Jika perlu, sesuaikan durasi per pertemuan agar totalnya pas.
+    
+    Konteks: Tema "${theme}", Format "${format}".
+    Tujuan: ${goalsText}
+    
+    Output JSON Array: [{ "id": "1", "name": "...", "type": "Tipe", "jp": 0, "description": "..." }]
+    `;
 
-    // Convert structured goals to string for prompt context
-    const goalsText = goals.map(g => `- ${g.description} (${g.subjects.join(', ')})`).join('\n');
+    const result = await generateWithRetry<Activity[]>(
+        "Activity Plan",
+        prompt,
+        (data) => {
+            if (!Array.isArray(data)) return { isValid: false, error: "Output bukan Array" };
+            if (data.length === 0) return { isValid: false, error: "Data kosong" };
+            
+            // MATH VALIDATION
+            const sum = data.reduce((acc: number, curr: any) => acc + (parseInt(curr.jp) || 0), 0);
+            const diff = Math.abs(sum - totalJp);
+            
+            // Toleransi kesalahan matematika kecil (misal 2 JP), tapi sebaiknya 0.
+            if (diff > 0) {
+                return { 
+                    isValid: false, 
+                    error: `Matematika Salah! Total JP aktivitas kamu adalah ${sum}, padahal target alokasi adalah ${totalJp}. Selisih ${diff} JP. Revisi durasi kegiatan agar pas.` 
+                };
+            }
+            
+            return { isValid: true };
+        },
+        { responseMimeType: "application/json" },
+        3 // Max 3 retries for Math
+    );
 
-    const response = await ai!.models.generateContent({
-      model: MODEL_NAME,
-      contents: `
-      Peran: Ahli Kurikulum & Desain Instruksional.
-      Tugas: Susun "Alur Aktivitas Kokurikuler" yang detail.
-
-      KONTEKS PROJEK:
-      - Tema: "${theme}"
-      - Total Waktu: ${totalJp} JP (Wajib dialokasikan habis).
-      - Tujuan: 
-      ${goalsText}
-      
-      INSTRUKSI KHUSUS:
-      1. Pecah kegiatan menjadi langkah-langkah nyata.
-      2. JP harus rasional (2-4 JP per pertemuan standar).
-      3. ${contextInstruction}
-      
-      Output JSON Array: [{ "id": "1", "name": "...", "type": "Tipe Aktivitas", "jp": 0, "description": "Micro-steps..." }]`,
-      config: {
-        systemInstruction: SYSTEM_INSTRUCTION,
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.ARRAY,
-          items: {
-            type: Type.OBJECT,
-            properties: {
-              id: { type: Type.STRING },
-              name: { type: Type.STRING },
-              type: { type: Type.STRING },
-              jp: { type: Type.INTEGER },
-              description: { type: Type.STRING }
-            },
-            required: ["id", "name", "type", "jp", "description"]
-          }
-        }
-      }
-    });
-    const jsonStr = response.text || "[]";
-    return JSON.parse(jsonStr);
-  } catch (error) {
-    handleGeminiError(error);
-    return [];
-  }
+    return result || [];
 };
 
 export const generateHiddenSections = async (project: ProjectState): Promise<Partial<ProjectState>> => {
-    try {
-        checkAI();
-        const prompt = `
-        Berdasarkan data projek berikut, buatlah narasi lengkap dokumen kokurikuler.
-        
-        DATA PROJEK:
-        Judul: ${project.title}
-        Tema: ${project.selectedTheme}
-        Dimensi: ${project.selectedDimensions.join(', ')}
-        Tujuan: ${project.projectGoals.map(g => g.description).join('; ')}
-        Daftar Aktivitas: ${project.activities.map(a => a.name).join(', ')}
+    const prompt = `
+    Data Projek: ${project.title}, Tema: ${project.selectedTheme}, Dimensi: ${project.selectedDimensions.join(', ')}.
+    Tugas:
+    1. Generate Activity Locations (Array String).
+    2. Generate Narasi (Pedagogi, Lingkungan, Digital, Assessment Plan).
+    3. Generate Rubrik Penilaian (Detail per dimensi, 4 level skor: Kurang, Cukup, Baik, Sangat Baik).
+    
+    Output JSON Object Lengkap sesuai schema ProjectState.
+    `;
 
-        TUGAS 1: GENERATE LOKASI KEGIATAN
-        Berdasarkan daftar aktivitas di atas, tentukan daftar tempat/lokasi spesifik pelaksanaan projek ini.
-        Contoh: ["Ruang Kelas", "Halaman Sekolah", "Taman Kota", "Museum XYZ"].
-        
-        TUGAS 2: NARASI AKADEMIK
-        Generate konten naratif untuk:
-        - pedagogicalStrategy (Metode yang digunakan)
-        - learningEnvironment (Setting lingkungan)
-        - digitalTools (Alat bantu digital)
-        - assessmentPlan (Rencana asesmen ringkas)
+    const result = await generateWithRetry<Partial<ProjectState>>(
+        "Finalization",
+        prompt,
+        (data) => {
+            if (typeof data !== 'object') return { isValid: false, error: "Bukan Object" };
+            if (!data.assessmentRubrics || !Array.isArray(data.assessmentRubrics)) return { isValid: false, error: "Rubrik penilaian hilang" };
+            return { isValid: true };
+        },
+        { responseMimeType: "application/json" }
+    );
 
-        TUGAS 3: RUBRIK ASESMEN (WAJIB DETAIL)
-        Buat rubrik penilaian untuk dimensi: ${project.selectedDimensions.join(', ')}.
-        Tentukan aspek penilaian spesifik dan deskripsi untuk 4 skala (Kurang, Cukup, Baik, Sangat Baik).
-        
-        Output JSON Object Lengkap.
-        `;
-
-        const response = await ai!.models.generateContent({
-            model: MODEL_NAME,
-            contents: prompt,
-            config: {
-                systemInstruction: SYSTEM_INSTRUCTION,
-                responseMimeType: "application/json",
-                responseSchema: {
-                    type: Type.OBJECT,
-                    properties: {
-                        activityLocations: { 
-                            type: Type.ARRAY, 
-                            items: { type: Type.STRING },
-                            description: "Daftar lokasi kegiatan spesifik, misal Ruang Kelas, Aula, Lapangan."
-                        },
-                        pedagogicalStrategy: { type: Type.STRING },
-                        learningEnvironment: { type: Type.STRING },
-                        digitalTools: { type: Type.STRING },
-                        assessmentPlan: { type: Type.STRING },
-                        assessmentRubrics: {
-                            type: Type.ARRAY,
-                            items: {
-                                type: Type.OBJECT,
-                                properties: {
-                                    dimensionName: { type: Type.STRING },
-                                    rubrics: {
-                                        type: Type.ARRAY,
-                                        items: {
-                                            type: Type.OBJECT,
-                                            properties: {
-                                                aspect: { type: Type.STRING },
-                                                score1: { type: Type.STRING },
-                                                score2: { type: Type.STRING },
-                                                score3: { type: Type.STRING },
-                                                score4: { type: Type.STRING }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        });
-
-        const text = response.text;
-        if (!text) throw new Error("No text");
-        return JSON.parse(text);
-
-    } catch (error) {
-        handleGeminiError(error);
-        console.error("Final Gen Error", error);
-        return {};
-    }
+    return result || {};
 }

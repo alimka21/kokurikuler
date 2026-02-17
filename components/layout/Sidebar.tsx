@@ -13,7 +13,7 @@ interface SidebarProps {
     user: User;
     projectData?: ProjectState;
     onEditIdentity: () => void; 
-    onLogout: () => void; // Added Prop
+    onLogout: () => void; 
 }
 
 const Sidebar: React.FC<SidebarProps> = ({ isOpen, currentView, onChangeView, currentStep, onStepClick, user, onEditIdentity, onLogout }) => {
@@ -58,18 +58,9 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, currentView, onChangeView, cu
                         <UserCircle className={`w-5 h-5 ${currentView === 'account' ? 'text-primary' : 'text-slate-400 group-hover:text-slate-600'}`} />
                         <span>Pengaturan Akun</span>
                     </button>
-
-                    {/* Admin Menu Only */}
-                    {user.role === 'admin' && (
-                        <button onClick={() => onChangeView('admin')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all font-medium text-sm group mt-4 border border-purple-100 ${currentView === 'admin' ? 'bg-purple-50 text-purple-700' : 'bg-slate-50/50 text-slate-600 hover:bg-purple-50 hover:text-purple-700'}`}>
-                            <ShieldCheck className={`w-5 h-5 ${currentView === 'admin' ? 'text-purple-600' : 'text-slate-400 group-hover:text-purple-600'}`} />
-                            <span>Admin Panel</span>
-                        </button>
-                    )}
                 </div>
 
-                {/* Wizard Steps (Only visible if not in Admin view) */}
-                {currentView !== 'admin' && currentView !== 'account' && (
+                {/* Wizard Steps (Always visible now) */}
                 <div className="space-y-2">
                     <div className="flex items-center justify-between px-3 mb-2">
                         <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest">Tahapan Projek</h3>
@@ -80,7 +71,8 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, currentView, onChangeView, cu
                     <div className="relative pl-3 ml-2 border-l border-slate-100 space-y-1">
                         {STEPS.map((step, idx) => {
                             const isActive = currentView === 'wizard' && idx === currentStep;
-                            const isCompleted = currentView === 'wizard' && idx < currentStep;
+                            // Change logic: Completed if index is less than current step, regardless of view
+                            const isCompleted = idx < currentStep;
 
                             return (
                                 <button
@@ -102,7 +94,6 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, currentView, onChangeView, cu
                         })}
                     </div>
                 </div>
-                )}
             </div>
 
             {/* Footer User Profile */}
@@ -115,7 +106,11 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, currentView, onChangeView, cu
                         <div className="overflow-hidden">
                             <div className="flex items-center gap-1">
                                 <p className="text-sm font-bold text-slate-900 truncate max-w-[120px]">{user.name || 'Pengguna'}</p>
-                                {user.role === 'admin' && <ShieldCheck className="w-3 h-3 text-purple-600" />}
+                                {user.role === 'admin' && (
+                                    <button onClick={() => onChangeView('admin')} className="p-0.5 bg-purple-100 rounded hover:bg-purple-200 transition-colors" title="Buka Admin Panel">
+                                        <ShieldCheck className="w-3 h-3 text-purple-600" />
+                                    </button>
+                                )}
                             </div>
                             <p className="text-xs text-slate-500 truncate max-w-[120px]">{user.school || 'Sekolah Belum Diatur'}</p>
                         </div>
