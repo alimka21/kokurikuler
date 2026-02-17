@@ -45,7 +45,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onNewProject, savedProjects, onLo
               <p className="text-slate-500 text-xs font-bold uppercase tracking-widest mb-1">Total Dokumen</p>
               <p className="text-3xl font-bold text-slate-900">{totalProjects}</p>
             </div>
-            <div className="w-12 h-12 bg-blue-50 rounded-xl flex items-center justify-center text-primary">
+            <div className="w-12 h-12 bg-emerald-50 rounded-xl flex items-center justify-center text-primary">
               <FolderOpen className="w-6 h-6" />
             </div>
           </div>
@@ -86,7 +86,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onNewProject, savedProjects, onLo
             <div key={proj.id} onClick={() => onLoadProject(proj.id)} className="bg-white border border-slate-200 rounded-2xl overflow-hidden flex flex-col shadow-soft hover:shadow-lg hover:border-primary/30 transition-all duration-300 group cursor-pointer h-[280px]">
               <div className="h-32 bg-slate-100 relative overflow-hidden">
                  {/* Decorative Gradient based on theme string length */}
-                 <div className={`absolute inset-0 opacity-80 bg-gradient-to-br ${proj.selectedTheme.length % 2 === 0 ? 'from-blue-500 to-primary' : 'from-emerald-400 to-secondary'}`}></div>
+                 <div className={`absolute inset-0 opacity-80 bg-gradient-to-br ${proj.selectedTheme.length % 2 === 0 ? 'from-[#558B6E] to-[#2F4F4F]' : 'from-[#E8B868] to-[#C99846]'}`}></div>
                  <div className="absolute top-4 left-4 bg-white/20 backdrop-blur-md text-white px-3 py-1 rounded-lg text-xs font-medium border border-white/20">
                    {proj.targetClass || "Draft"}
                  </div>
@@ -112,7 +112,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onNewProject, savedProjects, onLo
           ))}
 
           {/* New Project CTA Card */}
-          <button onClick={onNewProject} className="flex flex-col items-center justify-center h-[280px] border-2 border-dashed border-slate-300 rounded-2xl hover:border-primary hover:bg-blue-50/50 transition-all group">
+          <button onClick={onNewProject} className="flex flex-col items-center justify-center h-[280px] border-2 border-dashed border-slate-300 rounded-2xl hover:border-primary hover:bg-emerald-50/30 transition-all group">
             <div className="w-16 h-16 bg-white rounded-2xl border border-slate-200 shadow-sm flex items-center justify-center mb-4 group-hover:scale-110 group-hover:border-primary transition-all duration-300">
               <Plus className="w-8 h-8 text-primary" />
             </div>

@@ -1,3 +1,4 @@
+
 import React, { useEffect } from 'react';
 import { ProjectState } from '../../types';
 import { GraduationCap, Clock, Layers } from 'lucide-react';
@@ -57,7 +58,8 @@ const StepIdentity: React.FC<EnhancedProps> = ({ project, onChange, savedProject
                 icon: 'question',
                 showCancelButton: true,
                 confirmButtonText: 'Ya, Gunakan (Hemat Waktu)',
-                cancelButtonText: 'Tidak, Buat Baru'
+                cancelButtonText: 'Tidak, Buat Baru',
+                confirmButtonColor: '#558B6E'
             }).then((result) => {
                 if (result.isConfirmed) {
                     onChange('contextAnalysis', existing.contextAnalysis);
@@ -126,13 +128,13 @@ const StepIdentity: React.FC<EnhancedProps> = ({ project, onChange, savedProject
                             />
                         </InputGroup>
                         
-                         <div className="bg-blue-50 p-4 rounded-xl border border-blue-100 flex items-start gap-3">
-                            <div className="mt-1 text-blue-500">
+                         <div className="bg-emerald-50 p-4 rounded-xl border border-emerald-100 flex items-start gap-3">
+                            <div className="mt-1 text-primary">
                                 <Clock className="w-5 h-5" />
                             </div>
                             <div>
-                                <h4 className="font-bold text-blue-800 text-sm">Info Alokasi Waktu</h4>
-                                <p className="text-blue-700 text-xs mt-1 leading-relaxed">
+                                <h4 className="font-bold text-primary text-sm">Info Alokasi Waktu</h4>
+                                <p className="text-emerald-700 text-xs mt-1 leading-relaxed">
                                     Angka ini adalah batas maksimal total JP untuk projek kokurikuler dalam satu tahun ajaran sesuai struktur kurikulum.
                                 </p>
                             </div>

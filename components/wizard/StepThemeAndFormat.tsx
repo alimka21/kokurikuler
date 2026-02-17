@@ -50,7 +50,7 @@ const StepThemeAndFormat: React.FC<Props> = ({
             <div className="space-y-6 animate-in slide-in-from-bottom-4 duration-500">
                 <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
                     <div className="flex items-center gap-3">
-                        <div className="p-2 bg-blue-100 text-primary rounded-lg">
+                        <div className="p-2 bg-emerald-100 text-primary rounded-lg">
                             <Layers className="w-5 h-5" />
                         </div>
                         <div>
@@ -86,7 +86,7 @@ const StepThemeAndFormat: React.FC<Props> = ({
             {selectedTheme && (
                 <div className="space-y-6 animate-in slide-in-from-bottom-4 duration-500">
                      <div className="flex items-center gap-3">
-                        <div className="p-2 bg-purple-100 text-purple-600 rounded-lg">
+                        <div className="p-2 bg-stone-100 text-stone-600 rounded-lg">
                             <PenTool className="w-5 h-5" />
                         </div>
                         <div>
@@ -111,10 +111,10 @@ const StepThemeAndFormat: React.FC<Props> = ({
 
             {/* 3. IDE PROJEK (CREATIVE TITLE) */}
             {selectedTheme && activityFormat && (
-                 <div ref={ideaRef} className="space-y-6 animate-in slide-in-from-bottom-4 duration-500 bg-gradient-to-br from-indigo-50 to-blue-50 p-6 rounded-3xl border border-indigo-100">
+                 <div ref={ideaRef} className="space-y-6 animate-in slide-in-from-bottom-4 duration-500 bg-gradient-to-br from-emerald-50 to-stone-50 p-6 rounded-3xl border border-emerald-100">
                     <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
                         <div className="flex items-center gap-3">
-                            <div className="p-2 bg-indigo-100 text-indigo-600 rounded-lg">
+                            <div className="p-2 bg-emerald-200 text-emerald-800 rounded-lg">
                                 <Sparkles className="w-5 h-5" />
                             </div>
                             <div>
@@ -127,10 +127,10 @@ const StepThemeAndFormat: React.FC<Props> = ({
                         </div>
                     </div>
                     
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="flex flex-col gap-4">
                         {creativeIdeas.length === 0 ? (
-                            <div className="col-span-full p-6 text-center text-slate-400 text-sm italic">
-                                Klik tombol Generate untuk mendapatkan ide judul projek yang catchy (Singkatan/Akronim).
+                            <div className="p-6 text-center text-slate-400 text-sm italic">
+                                Klik tombol Generate untuk mendapatkan ide judul projek yang sesuai.
                             </div>
                         ) : (
                             creativeIdeas.map((idea, i) => (

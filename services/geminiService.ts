@@ -45,7 +45,8 @@ Bahasa Indonesia formal, pedagogis, namun praktis.
 ATURAN STRICT (SELF-CORRECTION):
 1. Jangan pernah memberikan output kosong.
 2. Pastikan format JSON valid (tanpa trailing comma).
-3. Pastikan logika konsisten (misal: Total JP aktivitas = Total Alokasi).
+3. HANYA berikan output JSON murni jika diminta, jangan ada teks pembuka/penutup.
+4. Pastikan logika konsisten (misal: Total JP aktivitas = Total Alokasi).
 `;
 
 // --- CORE: SELF-CORRECTION UTILITIES ---
@@ -53,9 +54,39 @@ ATURAN STRICT (SELF-CORRECTION):
 // 1. Helper to clean markdown JSON fences
 const cleanJson = (text: string): string => {
     if (!text) return "[]";
-    // Remove ```json and ``` fences
-    let cleaned = text.replace(/^```json\s*/, "").replace(/^```\s*/, "").replace(/\s*```$/, "");
-    return cleaned.trim();
+    
+    // 1. Try extracting from markdown code blocks first
+    const match = text.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
+    if (match) {
+        return match[1].trim();
+    }
+
+    // 2. If no blocks, try to find the first '[' or '{' and last ']' or '}'
+    const firstBrace = text.indexOf('{');
+    const firstBracket = text.indexOf('[');
+    
+    let startIdx = -1;
+    // Determine which starts first to identify Object vs Array
+    if (firstBrace !== -1 && firstBracket !== -1) {
+        startIdx = Math.min(firstBrace, firstBracket);
+    } else if (firstBrace !== -1) {
+        startIdx = firstBrace;
+    } else if (firstBracket !== -1) {
+        startIdx = firstBracket;
+    }
+
+    if (startIdx !== -1) {
+        const lastBrace = text.lastIndexOf('}');
+        const lastBracket = text.lastIndexOf(']');
+        const endIdx = Math.max(lastBrace, lastBracket);
+        
+        if (endIdx > startIdx) {
+            return text.substring(startIdx, endIdx + 1);
+        }
+    }
+
+    // 3. Fallback: return original trimmed (might fail JSON.parse if dirty)
+    return text.trim();
 };
 
 // 2. The Verification Loop Engine
@@ -64,7 +95,7 @@ async function generateWithRetry<T>(
     prompt: string,
     validator: (data: any) => { isValid: boolean; error?: string },
     config: any = {},
-    maxRetries = 3
+    maxRetries = 4
 ): Promise<T | null> {
     
     checkAI();
@@ -99,6 +130,7 @@ async function generateWithRetry<T>(
                     parsedData = textOutput; 
                 }
             } catch (jsonError) {
+                console.warn(`[AI-Agent] JSON Parse Error:`, textOutput.substring(0, 100) + "...");
                 throw new Error("INVALID_JSON_FORMAT");
             }
 
@@ -119,17 +151,17 @@ async function generateWithRetry<T>(
 
             // If we run out of retries, throw or return fallback
             if (attempts >= maxRetries) {
-                console.error(`[AI-Agent] Failed after ${maxRetries} attempts.`);
+                console.error(`[AI-Agent] Failed after ${maxRetries} attempts. Last error: ${msg}`);
                 // If specific API error, throw it up
                 handleGeminiError(error);
                 return null; 
             }
             
             // Backoff delay to prevent rate limiting or rapid failures
-            await new Promise(resolve => setTimeout(resolve, 1000 * attempts));
+            await new Promise(resolve => setTimeout(resolve, 1500 * attempts));
 
             // FEEDBACK LOOP: Append the error to the prompt so the AI can fix it
-            currentPrompt += `\n\n[SYSTEM ERROR]: Output sebelumnya SALAH. \nError: ${msg}. \nPerbaiki kesalahan ini dan generate ulang JSON yang valid.`;
+            currentPrompt += `\n\n[SYSTEM ERROR]: Output sebelumnya SALAH. \nError: ${msg}. \nPerbaiki kesalahan ini dan generate ulang JSON yang valid. HANYA JSON.`;
         }
     }
     return null;
@@ -220,10 +252,17 @@ export const recommendThemes = async (analysis: string, dimensions: Dimension[])
 export const generateCreativeIdeas = async (theme: string, format: string, analysis: string): Promise<CreativeIdeaOption[]> => {
     const safeAnalysis = analysis ? analysis.substring(0, 1500) : "Sekolah Menengah";
     const prompt = `
-    Role: Creative Director.
+    Role: Creative Director & Educational Consultant.
     Tema: "${theme}", Bentuk: "${format}", Insight: "${safeAnalysis}".
-    Tugas: 3 Judul Projek berupa AKRONIM UNIK (Contoh: "GELAS: Gerakan Lawan Sampah").
-    Output JSON: [{ "title": "AKRONIM: Judul", "description": "Narasi menarik..." }]
+    
+    Tugas: Rumuskan 3 Ide Judul Projek Kokurikuler yang KONTEKSTUAL, RELEVAN, dan JELAS.
+    
+    Prinsip Utama:
+    1. Judul harus menggambarkan aktivitas yang cocok dengan konteks siswa/sekolah.
+    2. Singkatan/Akronim BOLEH digunakan jika bermakna, TAPI TIDAK WAJIB. Jangan memaksakan singkatan jika terdengar aneh.
+    3. Fokus pada kualitas ide dan relevansi, bukan sekadar permainan kata.
+    
+    Output JSON: [{ "title": "Judul Projek", "description": "Narasi menarik dan jelas tentang aktivitas projek..." }]
     `;
 
     const result = await generateWithRetry<CreativeIdeaOption[]>(
