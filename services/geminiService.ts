@@ -33,6 +33,7 @@ try {
     console.error("Failed to initialize Gemini Client:", e);
 }
 
+// Default model for most tasks (Analysis, Ideas, etc.)
 const MODEL_NAME = 'gemini-2.5-flash-preview'; 
 
 const SYSTEM_INSTRUCTION = `
@@ -70,12 +71,15 @@ async function generateWithRetry<T>(
     let currentPrompt = prompt;
     let attempts = 0;
 
+    // Feature: Allow specific functions to override the model
+    const targetModel = config.model || MODEL_NAME;
+
     while (attempts < maxRetries) {
         try {
-            console.log(`[AI-Agent] ${operationName} - Attempt ${attempts + 1}`);
+            console.log(`[AI-Agent] ${operationName} (${targetModel}) - Attempt ${attempts + 1}`);
             
             const response = await ai!.models.generateContent({
-                model: MODEL_NAME,
+                model: targetModel,
                 contents: currentPrompt,
                 config: {
                     systemInstruction: SYSTEM_INSTRUCTION,
@@ -120,6 +124,9 @@ async function generateWithRetry<T>(
                 handleGeminiError(error);
                 return null; 
             }
+            
+            // Backoff delay to prevent rate limiting or rapid failures
+            await new Promise(resolve => setTimeout(resolve, 1000 * attempts));
 
             // FEEDBACK LOOP: Append the error to the prompt so the AI can fix it
             currentPrompt += `\n\n[SYSTEM ERROR]: Output sebelumnya SALAH. \nError: ${msg}. \nPerbaiki kesalahan ini dan generate ulang JSON yang valid.`;
@@ -153,13 +160,11 @@ export const analyzeSchoolContext = async (text: string): Promise<string> => {
   Metode: Core Idea -> Clustering -> Abstraction -> Synthesis.
   Output: 2-3 paragraf naratif kohesif. TANPA simbol asterisk (*), TANPA bullet points.`;
 
-  // FIXED: Now using generateWithRetry for consistency and robustness
   const result = await generateWithRetry<string>(
       "Context Analysis",
       prompt,
       (data) => {
           if (typeof data !== 'string') return { isValid: false, error: "Output bukan teks" };
-          // Validation: Ensure AI actually wrote something substantial
           if (data.length < 50) return { isValid: false, error: "Analisis terlalu pendek/gagal" };
           return { isValid: true };
       },
@@ -181,7 +186,6 @@ export const recommendDimensions = async (analysis: string): Promise<Dimension[]
         (data) => {
             if (!Array.isArray(data)) return { isValid: false, error: "Output bukan Array" };
             if (data.length === 0) return { isValid: false, error: "Array kosong" };
-            // Optional: Check if strings match enum
             return { isValid: true };
         },
         { responseMimeType: "application/json" }
@@ -258,7 +262,6 @@ export const draftProjectGoals = async (theme: string, dimensions: Dimension[], 
     return result || [];
 };
 
-// --- CRITICAL: Activity Planning with Math Consistency Check ---
 export const generateActivityPlan = async (totalJp: number, theme: string, goals: ProjectGoal[], format: string): Promise<Activity[]> => {
     const goalsText = goals.map(g => `- ${g.description}`).join('\n');
     
@@ -287,7 +290,6 @@ export const generateActivityPlan = async (totalJp: number, theme: string, goals
             const sum = data.reduce((acc: number, curr: any) => acc + (parseInt(curr.jp) || 0), 0);
             const diff = Math.abs(sum - totalJp);
             
-            // Toleransi kesalahan matematika kecil (misal 2 JP), tapi sebaiknya 0.
             if (diff > 0) {
                 return { 
                     isValid: false, 
@@ -304,15 +306,40 @@ export const generateActivityPlan = async (totalJp: number, theme: string, goals
     return result || [];
 };
 
+// --- FINALIZATION: Uses gemini-3-flash-preview specifically ---
 export const generateHiddenSections = async (project: ProjectState): Promise<Partial<ProjectState>> => {
     const prompt = `
-    Data Projek: ${project.title}, Tema: ${project.selectedTheme}, Dimensi: ${project.selectedDimensions.join(', ')}.
-    Tugas:
-    1. Generate Activity Locations (Array String).
-    2. Generate Narasi (Pedagogi, Lingkungan, Digital, Assessment Plan).
-    3. Generate Rubrik Penilaian (Detail per dimensi, 4 level skor: Kurang, Cukup, Baik, Sangat Baik).
+    Data Projek: ${project.title}
+    Tema: ${project.selectedTheme}
+    Dimensi: ${project.selectedDimensions.join(', ')}
     
-    Output JSON Object Lengkap sesuai schema ProjectState.
+    Tugas: Lengkapi dokumen kokurikuler dengan narasi akademik dan rubrik penilaian detil.
+    
+    Output WAJIB JSON Object dengan struktur persis ini (tanpa markdown code block tambahan di dalam string):
+    {
+      "activityLocations": ["Lokasi 1", "Lokasi 2"],
+      "pedagogicalStrategy": "Paragraf narasi...",
+      "learningEnvironment": "Paragraf narasi...",
+      "partnerships": "Narasi kemitraan...",
+      "digitalTools": "Narasi alat digital...",
+      "assessmentPlan": "Narasi rencana asesmen...",
+      "assessmentRubrics": [
+         {
+           "dimensionName": "Nama Dimensi (Sesuai Input)",
+           "rubrics": [
+             { 
+               "aspect": "Aspek penilaian",
+               "score1": "Deskripsi Mulai Berkembang",
+               "score2": "Deskripsi Sedang Berkembang",
+               "score3": "Deskripsi Berkembang Sesuai Harapan",
+               "score4": "Deskripsi Sangat Berkembang"
+             }
+           ]
+         }
+      ]
+    }
+    
+    Buatkan rubrik untuk SEMUA dimensi yang dipilih: ${project.selectedDimensions.join(', ')}.
     `;
 
     const result = await generateWithRetry<Partial<ProjectState>>(
@@ -320,10 +347,23 @@ export const generateHiddenSections = async (project: ProjectState): Promise<Par
         prompt,
         (data) => {
             if (typeof data !== 'object') return { isValid: false, error: "Bukan Object" };
-            if (!data.assessmentRubrics || !Array.isArray(data.assessmentRubrics)) return { isValid: false, error: "Rubrik penilaian hilang" };
+            
+            // Critical Check: Assessment Rubrics
+            if (!data.assessmentRubrics || !Array.isArray(data.assessmentRubrics)) {
+                return { isValid: false, error: "Rubrik penilaian hilang (Key: assessmentRubrics tidak ditemukan)" };
+            }
+            
+            if (data.assessmentRubrics.length === 0) {
+                 return { isValid: false, error: "Rubrik penilaian kosong, harus ada minimal 1 dimensi" };
+            }
+
             return { isValid: true };
         },
-        { responseMimeType: "application/json" }
+        { 
+            responseMimeType: "application/json",
+            model: "gemini-3-flash-preview" // Override default 2.5 with 3-flash for this complex task
+        },
+        3
     );
 
     return result || {};

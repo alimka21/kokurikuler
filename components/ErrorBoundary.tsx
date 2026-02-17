@@ -1,9 +1,8 @@
-
-import React from "react";
+import React, { Component, ReactNode } from "react";
 import { AlertTriangle } from "lucide-react";
 
 interface Props {
-  children: React.ReactNode;
+  children: ReactNode;
 }
 
 interface State {
@@ -11,13 +10,16 @@ interface State {
   error: any;
 }
 
-export class ErrorBoundary extends React.Component<Props, State> {
+export class ErrorBoundary extends Component<Props, State> {
   constructor(props: Props) {
     super(props);
-    this.state = { hasError: false, error: null };
+    this.state = {
+      hasError: false,
+      error: null
+    };
   }
 
-  static getDerivedStateFromError(error: any) {
+  static getDerivedStateFromError(error: any): State {
     return { hasError: true, error };
   }
 
