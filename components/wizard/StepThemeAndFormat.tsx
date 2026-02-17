@@ -3,6 +3,7 @@ import React, { useRef, useEffect } from 'react';
 import { ThemeOption, CreativeIdeaOption } from '../../types';
 import { AIButton, SelectionCard } from '../common/UiKit';
 import { Layers, PenTool, Sparkles, Lightbulb, Zap } from 'lucide-react';
+import Swal from 'sweetalert2';
 
 interface Props {
     options: ThemeOption[];
@@ -19,13 +20,17 @@ interface Props {
     isLoading: boolean;
     onGenerateThemes: () => void;
     onGenerateIdeas: () => void;
+
+    // Checks for overwrite warning
+    hasDownstreamData: boolean; 
 }
 
 const StepThemeAndFormat: React.FC<Props> = ({ 
     options, selectedTheme, onSelectTheme, 
     activityFormat, onSelectFormat, 
     creativeIdeas, selectedIdea, onSelectIdea,
-    isLoading, onGenerateThemes, onGenerateIdeas 
+    isLoading, onGenerateThemes, onGenerateIdeas,
+    hasDownstreamData
 }) => {
     
     const ideaRef = useRef<HTMLDivElement>(null);
@@ -36,6 +41,46 @@ const StepThemeAndFormat: React.FC<Props> = ({
             ideaRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
         }
     }, [creativeIdeas]);
+
+    const handleThemeChange = (name: string, reason: string) => {
+        if (hasDownstreamData && selectedTheme && name !== selectedTheme) {
+            Swal.fire({
+                title: 'Perhatian!',
+                text: 'Anda sudah memiliki data Tujuan/Aktivitas di langkah selanjutnya. Mengubah Tema mungkin membuat data tersebut tidak relevan. Lanjutkan?',
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonText: 'Ya, Ubah',
+                cancelButtonText: 'Batal',
+                confirmButtonColor: '#F59E0B'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    onSelectTheme(name, reason);
+                }
+            });
+        } else {
+            onSelectTheme(name, reason);
+        }
+    };
+
+    const handleFormatChange = (fmtId: string) => {
+         if (hasDownstreamData && activityFormat && fmtId !== activityFormat) {
+            Swal.fire({
+                title: 'Perhatian!',
+                text: 'Anda sudah menyusun rencana di langkah selanjutnya. Mengubah Bentuk Kegiatan mungkin memerlukan penyesuaian besar. Lanjutkan?',
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonText: 'Ya, Ubah',
+                cancelButtonText: 'Batal',
+                confirmButtonColor: '#F59E0B'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    onSelectFormat(fmtId);
+                }
+            });
+        } else {
+            onSelectFormat(fmtId);
+        }
+    };
 
     const formats = [
         { id: "Kolaboratif Lintas Disiplin Ilmu", desc: "Integrasi kompetensi dari beberapa mata pelajaran." },
@@ -72,7 +117,7 @@ const StepThemeAndFormat: React.FC<Props> = ({
                             <SelectionCard
                                 key={i}
                                 selected={selectedTheme === opt.name}
-                                onClick={() => onSelectTheme(opt.name, opt.reason)}
+                                onClick={() => handleThemeChange(opt.name, opt.reason)}
                                 title={opt.name}
                                 description={opt.reason}
                                 icon={Layers}
@@ -99,7 +144,7 @@ const StepThemeAndFormat: React.FC<Props> = ({
                              <SelectionCard
                                 key={fmt.id}
                                 selected={activityFormat === fmt.id}
-                                onClick={() => onSelectFormat(fmt.id)}
+                                onClick={() => handleFormatChange(fmt.id)}
                                 title={fmt.id}
                                 description={fmt.desc}
                                 icon={Zap}
@@ -141,7 +186,7 @@ const StepThemeAndFormat: React.FC<Props> = ({
                                     title={idea.title}
                                     description={idea.description}
                                     icon={Lightbulb}
-                                    recommended={i === 0}
+                                    recommended={false} // Requirement: No recommendation highlight
                                 />
                             ))
                         )}

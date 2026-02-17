@@ -29,7 +29,7 @@ import StepGoals from './components/wizard/StepGoals';
 import StepActivityPlanning from './components/wizard/StepActivityPlanning';
 import StepFinalization from './components/wizard/StepFinalization';
 
-import { ChevronRight, ChevronLeft, Save, AlertTriangle, WifiOff } from 'lucide-react';
+import { ChevronRight, ChevronLeft, Save, AlertTriangle, WifiOff, RotateCcw } from 'lucide-react';
 
 type ViewMode = 'dashboard' | 'projects' | 'wizard' | 'editor' | 'identity' | 'admin' | 'account';
 
@@ -38,7 +38,7 @@ const AuthenticatedApp: React.FC = () => {
     const { user, logout, updateUser } = useAuth();
     const { 
         project, savedProjects, updateProject, currentStep, nextStep, prevStep, goToStep,
-        loadingAI, isFinalizing, saveProject, createNewProject, loadProject, duplicateProject,
+        loadingAI, isFinalizing, saveProject, createNewProject, loadProject, duplicateProject, resetProject,
         runAnalysis, runThemeRecommend, runCreativeIdeaGen, runGoalDraft, runActivityPlan, 
         runFinalization, exportDocx, exportAnnualDocx 
     } = useProject();
@@ -168,6 +168,23 @@ const AuthenticatedApp: React.FC = () => {
             window.location.hash = '';
         }
     };
+    
+    const handleReset = () => {
+        Swal.fire({
+            title: 'Buat Projek Baru?',
+            text: 'Tindakan ini akan mereset data projek saat ini. Pastikan Anda sudah menyimpannya jika perlu.',
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonColor: '#558B6E',
+            confirmButtonText: 'Ya, Buat Baru',
+            cancelButtonText: 'Batal'
+        }).then((result) => {
+            if (result.isConfirmed) {
+                resetProject();
+                window.scrollTo(0, 0);
+            }
+        });
+    };
 
     // --- RENDER LOGIC ---
 
@@ -203,10 +220,10 @@ const AuthenticatedApp: React.FC = () => {
             case 1: return <StepIdentity project={project} onChange={updateProject} savedProjects={savedProjects} />;
             case 2: return <StepAnalysis data={project.contextAnalysis} phase={project.phase} targetClass={project.targetClass} onUpdateData={(d) => updateProject('contextAnalysis', d)} onAnalyze={runAnalysis} summary={project.analysisSummary} isAnalyzing={loadingAI} />;
             case 3: return <StepDimensions recommended={project.recommendedDimensions} selected={project.selectedDimensions} onSelect={(dims) => updateProject('selectedDimensions', dims)} isLoading={loadingAI} />;
-            case 4: return <StepThemeAndFormat options={project.themeOptions} selectedTheme={project.selectedTheme} onSelectTheme={(t, r) => { updateProject('selectedTheme', t); updateProject('selectedThemeReason', r); }} activityFormat={project.activityFormat} onSelectFormat={(f) => updateProject('activityFormat', f)} creativeIdeas={project.creativeIdeas} selectedIdea={project.title} onSelectIdea={(t) => { updateProject('title', t); const selectedIdeaObj = project.creativeIdeas.find(idea => idea.title === t); if (selectedIdeaObj) { updateProject('projectDescription', selectedIdeaObj.description); } }} onGenerateIdeas={runCreativeIdeaGen} isLoading={loadingAI} onGenerateThemes={runThemeRecommend} />;
-            case 5: return <StepGoals goals={project.projectGoals} setGoals={(g) => updateProject('projectGoals', g)} onGenerate={runGoalDraft} isGenerating={loadingAI} />;
+            case 4: return <StepThemeAndFormat options={project.themeOptions} selectedTheme={project.selectedTheme} onSelectTheme={(t, r) => { updateProject('selectedTheme', t); updateProject('selectedThemeReason', r); }} activityFormat={project.activityFormat} onSelectFormat={(f) => updateProject('activityFormat', f)} creativeIdeas={project.creativeIdeas} selectedIdea={project.title} onSelectIdea={(t) => { updateProject('title', t); const selectedIdeaObj = project.creativeIdeas.find(idea => idea.title === t); if (selectedIdeaObj) { updateProject('projectDescription', selectedIdeaObj.description); } }} onGenerateIdeas={runCreativeIdeaGen} isLoading={loadingAI} onGenerateThemes={runThemeRecommend} hasDownstreamData={project.projectGoals.length > 0 || project.activities.length > 0} />;
+            case 5: return <StepGoals goals={project.projectGoals} setGoals={(g) => updateProject('projectGoals', g)} onGenerate={runGoalDraft} isGenerating={loadingAI} phase={project.phase} />;
             case 6: return <StepActivityPlanning totalJp={project.projectJpAllocation} totalAnnualJp={project.totalJpAnnual} setTotalJp={(v) => updateProject('projectJpAllocation', v)} activities={project.activities} setActivities={(a) => updateProject('activities', a)} onGenerate={runActivityPlan} isGenerating={loadingAI} />;
-            case 7: return <StepFinalization project={project} isReady={!!project.assessmentPlan} isFinalizing={isFinalizing} themeName={project.selectedTheme} onFinalize={runFinalization} onViewEditor={() => setView('editor')} onDownload={exportDocx} onDownloadAnnual={exportAnnualDocx} onSaveProject={saveProject} />;
+            case 7: return <StepFinalization project={project} isReady={!!project.assessmentPlan} isFinalizing={isFinalizing} themeName={project.selectedTheme} onFinalize={runFinalization} onViewEditor={() => setView('editor')} onDownload={exportDocx} onDownloadAnnual={exportAnnualDocx} onSaveProject={saveProject} onReset={handleReset} />;
             default: return null;
         }
     };
@@ -250,17 +267,24 @@ const AuthenticatedApp: React.FC = () => {
                 {view === 'wizard' && (
                     <div className="absolute bottom-0 left-0 right-0 bg-white/90 backdrop-blur-md border-t border-slate-200 p-6 z-40">
                         <div className="max-w-5xl mx-auto flex flex-col sm:flex-row justify-between items-center gap-4">
-                            <button onClick={prevStep} disabled={currentStep === 0} className="px-6 py-3 rounded-xl font-semibold text-slate-600 hover:bg-slate-100 hover:text-slate-900 disabled:opacity-50 flex items-center gap-2 transition-all">
-                                <ChevronLeft className="w-5 h-5" /> Back
-                            </button>
-                            <div className="flex items-center gap-3">
+                            <div className="flex items-center gap-3 w-full sm:w-auto">
+                                <button onClick={prevStep} disabled={currentStep === 0} className="px-6 py-3 rounded-xl font-semibold text-slate-600 hover:bg-slate-100 hover:text-slate-900 disabled:opacity-50 flex items-center gap-2 transition-all flex-1 sm:flex-none justify-center">
+                                    <ChevronLeft className="w-5 h-5" /> Back
+                                </button>
+                                {/* Reset Button Icon */}
+                                <button onClick={handleReset} className="px-4 py-3 rounded-xl font-bold text-red-500 bg-red-50 hover:bg-red-100 transition-all flex items-center gap-2 flex-none" title="Buat Projek Baru / Reset">
+                                    <RotateCcw className="w-5 h-5" />
+                                </button>
+                            </div>
+                            
+                            <div className="flex items-center gap-3 w-full sm:w-auto">
                                 {currentStep < STEPS.length - 1 && (
-                                    <button onClick={() => saveProject()} className="px-6 py-3 rounded-xl font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 transition-all flex items-center gap-2">
+                                    <button onClick={() => saveProject()} className="px-6 py-3 rounded-xl font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 transition-all flex items-center gap-2 flex-1 sm:flex-none justify-center">
                                         <Save className="w-4 h-4" /> Simpan
                                     </button>
                                 )}
                                 {currentStep < STEPS.length - 1 && (
-                                    <button onClick={nextStep} className="px-8 py-3 rounded-xl font-bold text-white bg-primary shadow-lg shadow-primary/30 hover:bg-primary-hover hover:-translate-y-0.5 transition-all flex items-center gap-2">
+                                    <button onClick={nextStep} className="px-8 py-3 rounded-xl font-bold text-white bg-primary shadow-lg shadow-primary/30 hover:bg-primary-hover hover:-translate-y-0.5 transition-all flex items-center gap-2 flex-1 sm:flex-none justify-center">
                                         Continue <ChevronRight className="w-5 h-5" />
                                     </button>
                                 )}

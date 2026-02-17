@@ -2,16 +2,18 @@
 import React from 'react';
 import { ProjectGoal } from '../../types';
 import { AIButton, SectionHeader } from '../common/UiKit';
-import { Plus, Trash2, Tag, BookOpenCheck } from 'lucide-react';
+import { Plus, Trash2, Tag, BookOpenCheck, ChevronDown } from 'lucide-react';
+import { SUBJECTS_BY_PHASE, DEFAULT_SUBJECTS } from '../../constants';
 
 interface Props {
   goals: ProjectGoal[];
   setGoals: (goals: ProjectGoal[]) => void;
   onGenerate: () => void;
   isGenerating: boolean;
+  phase: string; // Receive phase for filtering
 }
 
-const StepGoals: React.FC<Props> = ({ goals, setGoals, onGenerate, isGenerating }) => {
+const StepGoals: React.FC<Props> = ({ goals, setGoals, onGenerate, isGenerating, phase }) => {
 
   const addGoal = () => {
     setGoals([
@@ -43,6 +45,9 @@ const StepGoals: React.FC<Props> = ({ goals, setGoals, onGenerate, isGenerating 
   const removeSubject = (id: string, currentSubjects: string[], subjectToRemove: string) => {
       updateGoal(id, 'subjects', currentSubjects.filter(s => s !== subjectToRemove));
   };
+
+  // Get subjects based on phase
+  const availableSubjects = SUBJECTS_BY_PHASE[phase] || DEFAULT_SUBJECTS;
 
   return (
     <div className="max-w-4xl mx-auto py-4">
@@ -90,36 +95,47 @@ const StepGoals: React.FC<Props> = ({ goals, setGoals, onGenerate, isGenerating 
                             <div>
                                 <div className="flex items-center justify-between mb-2">
                                      <label className="text-xs font-bold text-slate-400 uppercase tracking-widest flex items-center gap-1">
-                                        <Tag className="w-3 h-3" /> Integrasi Mata Pelajaran
+                                        <Tag className="w-3 h-3" /> Integrasi Mata Pelajaran ({phase})
                                      </label>
                                      {goal.subjects.length < 2 && (
                                          <span className="text-[10px] text-red-500 font-bold bg-red-50 px-2 py-0.5 rounded-full">Min. 2 Mapel</span>
                                      )}
                                 </div>
                                 
-                                <div className="flex flex-wrap gap-2 mb-2">
+                                <div className="flex flex-wrap gap-2 mb-2 p-3 bg-slate-50 rounded-xl border border-slate-100">
                                     {goal.subjects.map(subj => (
-                                        <span key={subj} className="inline-flex items-center gap-1 px-3 py-1 bg-blue-50 text-blue-700 text-sm font-bold rounded-full border border-blue-100">
+                                        <span key={subj} className="inline-flex items-center gap-1 px-3 py-1 bg-white text-blue-700 text-sm font-bold rounded-full border border-blue-100 shadow-sm">
                                             {subj}
                                             <button onClick={() => removeSubject(goal.id, goal.subjects, subj)} className="hover:text-red-500"><Trash2 className="w-3 h-3" /></button>
                                         </span>
                                     ))}
-                                    <input 
-                                        type="text"
-                                        className="inline-block w-32 px-3 py-1 bg-transparent border-none text-sm placeholder:text-slate-400 focus:ring-0"
-                                        placeholder="+ Tulis Mapel..."
-                                        onKeyDown={(e) => {
-                                            if (e.key === 'Enter') {
-                                                e.preventDefault();
-                                                addSubject(goal.id, goal.subjects, e.currentTarget.value);
-                                                e.currentTarget.value = '';
-                                            }
-                                        }}
-                                        onBlur={(e) => {
-                                            addSubject(goal.id, goal.subjects, e.target.value);
-                                            e.target.value = '';
-                                        }}
-                                    />
+                                    
+                                    {/* Datalist Input for filtered subjects */}
+                                    <div className="relative flex-1 min-w-[200px]">
+                                        <input 
+                                            list={`subjects-${goal.id}`}
+                                            className="w-full bg-transparent border-none text-sm placeholder:text-slate-400 focus:ring-0 p-1"
+                                            placeholder="+ Pilih Mapel (Ketik untuk cari...)"
+                                            onKeyDown={(e) => {
+                                                if (e.key === 'Enter') {
+                                                    e.preventDefault();
+                                                    addSubject(goal.id, goal.subjects, e.currentTarget.value);
+                                                    e.currentTarget.value = '';
+                                                }
+                                            }}
+                                            onBlur={(e) => {
+                                                if(e.target.value) {
+                                                    addSubject(goal.id, goal.subjects, e.target.value);
+                                                    e.target.value = '';
+                                                }
+                                            }}
+                                        />
+                                        <datalist id={`subjects-${goal.id}`}>
+                                            {availableSubjects.map((subject) => (
+                                                <option key={subject} value={subject} />
+                                            ))}
+                                        </datalist>
+                                    </div>
                                 </div>
                             </div>
                         </div>

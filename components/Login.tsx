@@ -159,11 +159,11 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
                     href="https://pakarmodul.vercel.app/" 
                     target="_blank" 
                     rel="noopener noreferrer"
-                    className="mt-6 group relative inline-flex items-center justify-center px-8 py-3 text-sm font-bold text-[#3D6950] bg-white rounded-full shadow-2xl hover:bg-[#F0F5F2] hover:scale-105 transition-all duration-300 ring-4 ring-white/30"
+                    className="mt-6 group relative inline-flex items-center justify-center px-8 py-3 text-sm font-bold text-white bg-gradient-to-r from-orange-500 to-amber-500 rounded-full shadow-2xl hover:from-orange-600 hover:to-amber-600 hover:scale-105 transition-all duration-300 ring-4 ring-white/30"
                 >
-                    <Rocket className="w-4 h-4 mr-2 text-[#558B6E] animate-pulse" />
+                    <Rocket className="w-4 h-4 mr-2 text-white animate-pulse" />
                     <span>Buka Pakar Modul Ajar</span>
-                    <ExternalLink className="w-3 h-3 ml-2 opacity-60" />
+                    <ExternalLink className="w-3 h-3 ml-2 opacity-80" />
                 </a>
 
              </div>

@@ -23,8 +23,9 @@ const StepDimensions: React.FC<Props> = ({ recommended, selected, onSelect, isLo
                         <Sparkles className="w-8 h-8" />
                     </div>
                 </div>
-                <h3 className="text-xl font-bold text-slate-800 mb-3">Menganalisis Konteks...</h3>
-                <p className="text-slate-500 max-w-md text-lg leading-relaxed">
+                {/* Updated Text per instruction */}
+                <h3 className="text-xl font-bold text-slate-800 mb-3">Mohon Tunggu Sebentar...</h3>
+                <p className="text-slate-500 max-w-lg text-lg leading-relaxed">
                     Tunggu sebentar AI akan menentukan rekomendasi dimensi profil lulusan yang sesuai dengan hasil analisis konteks kamu
                 </p>
             </div>

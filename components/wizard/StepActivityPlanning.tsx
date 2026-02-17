@@ -16,7 +16,7 @@ const ActivityItem: React.FC<{
                 <div className="flex-1">
                     <div className="flex items-center gap-2 mb-1">
                         <span className="px-2 py-0.5 bg-slate-100 text-slate-500 text-[10px] font-bold uppercase rounded-md tracking-wide">
-                        Pertemuan {idx + 1}
+                        Tahap {idx + 1}
                         </span>
                         <input 
                         value={activity.type}

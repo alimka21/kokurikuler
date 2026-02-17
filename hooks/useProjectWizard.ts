@@ -64,8 +64,8 @@ export const useProjectWizard = (user: any) => {
             setSavedProjects(projects);
         } catch (e) {
             console.error("Failed to fetch projects", e);
-            // Fallback to empty if table doesn't exist yet
-            setSavedProjects([]);
+            // NOTE: Do NOT clear savedProjects here. 
+            // If fetch fails (e.g., RLS error), we keep the local state (Optimistic Updates).
         }
     };
 
@@ -124,6 +124,27 @@ export const useProjectWizard = (user: any) => {
         setProject(newP);
         setCurrentStep(0);
         saveDraft('current_project', newP);
+        saveDraft('current_step', 0);
+    };
+
+    // New Function: Reset Current Project to Step 1 state but keep identity
+    const resetProject = () => {
+        const resetP = {
+            ...INITIAL_PROJECT_STATE,
+            id: crypto.randomUUID(),
+            schoolName: project.schoolName,
+            coordinatorName: project.coordinatorName,
+            coordinatorNip: project.coordinatorNip,
+            principalName: project.principalName,
+            principalNip: project.principalNip,
+            signaturePlace: project.signaturePlace,
+            // We specifically want to clear analysis and downstream data
+            contextAnalysis: INITIAL_PROJECT_STATE.contextAnalysis,
+            analysisSummary: ""
+        };
+        setProject(resetP);
+        setCurrentStep(0);
+        saveDraft('current_project', resetP);
         saveDraft('current_step', 0);
     };
 
@@ -281,7 +302,7 @@ export const useProjectWizard = (user: any) => {
         setCurrentStep(stepIndex);
     }
 
-    // --- AI Actions Wrappers (Same as before) ---
+    // --- AI Actions Wrappers ---
     const runAnalysis = async () => {
         if (!checkPrerequisites('analyze')) return;
         setLoadingAI(true);
@@ -323,7 +344,13 @@ export const useProjectWizard = (user: any) => {
         if (!checkPrerequisites('goals')) return;
         setLoadingAI(true);
         try {
-            const goal = await Gemini.draftProjectGoals(project.selectedTheme, project.selectedDimensions, project.activityFormat);
+            // Pass Phase to AI so it knows which subjects to use
+            const goal = await Gemini.draftProjectGoals(
+                project.selectedTheme, 
+                project.selectedDimensions, 
+                project.activityFormat,
+                project.phase // <-- ADDED THIS
+            );
             updateProject('projectGoals', goal);
             setLoadingAI(false);
         } catch (e) { handleAIError(e); }
@@ -354,6 +381,6 @@ export const useProjectWizard = (user: any) => {
     return {
         project, savedProjects, updateProject, currentStep, nextStep, prevStep, goToStep, loadingAI, isFinalizing,
         saveProject, createNewProject, loadProject, duplicateProject, runAnalysis, runThemeRecommend, runCreativeIdeaGen,
-        runGoalDraft, runActivityPlan, runFinalization, exportDocx, exportAnnualDocx
+        runGoalDraft, runActivityPlan, runFinalization, exportDocx, exportAnnualDocx, resetProject
     };
 };

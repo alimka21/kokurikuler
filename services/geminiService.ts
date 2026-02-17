@@ -1,6 +1,7 @@
 
 import { GoogleGenAI, Type } from "@google/genai";
 import { Dimension, Activity, ThemeOption, ProjectState, ProjectGoal, CreativeIdeaOption } from "../types";
+import { SUBJECTS_BY_PHASE, DEFAULT_SUBJECTS } from "../constants";
 
 // Safe env access
 const getEnv = (key: string) => {
@@ -34,7 +35,7 @@ try {
 }
 
 // Default model for most tasks (Analysis, Ideas, etc.)
-const MODEL_NAME = 'gemini-2.5-flash-preview'; 
+const MODEL_NAME = 'gemini-2.5-flash'; 
 
 const SYSTEM_INSTRUCTION = `
 Anda adalah Ahli Kokurikuler (Kurikulum Nasional) & Instructional Designer Senior.
@@ -262,7 +263,11 @@ export const generateCreativeIdeas = async (theme: string, format: string, analy
     2. Singkatan/Akronim BOLEH digunakan jika bermakna, TAPI TIDAK WAJIB. Jangan memaksakan singkatan jika terdengar aneh.
     3. Fokus pada kualitas ide dan relevansi, bukan sekadar permainan kata.
     
-    Output JSON: [{ "title": "Judul Projek", "description": "Narasi menarik dan jelas tentang aktivitas projek..." }]
+    Aturan Deskripsi ("description"):
+    Deskripsi harus berupa 1 paragraf naratif yang mencakup alur:
+    Masalah/Latar Belakang -> Aktivitas Murid -> Pembelajaran/Kompetensi -> Output (Produk/Karakter).
+
+    Output JSON: [{ "title": "Judul Projek", "description": "Narasi sesuai aturan alur di atas..." }]
     `;
 
     const result = await generateWithRetry<CreativeIdeaOption[]>(
@@ -279,12 +284,43 @@ export const generateCreativeIdeas = async (theme: string, format: string, analy
     return result || [];
 };
 
-export const draftProjectGoals = async (theme: string, dimensions: Dimension[], format: string): Promise<ProjectGoal[]> => {
+export const draftProjectGoals = async (theme: string, dimensions: Dimension[], format: string, phase: string): Promise<ProjectGoal[]> => {
+    const allowedSubjects = SUBJECTS_BY_PHASE[phase] || DEFAULT_SUBJECTS;
+    
+    let specificInstruction = "";
+    // LOGIC CABANG UNTUK FORMAT
+    if (format.toLowerCase().includes("kolabora")) {
+        // CASE A: KOLABORATIF
+        specificInstruction = `
+        MODUS: KOLABORATIF MATA PELAJARAN
+        Aturan Penulisan "description":
+        1. Tujuan harus akademis dan spesifik mengacu pada kompetensi mapel.
+        2. WAJIB menuliskan nama mata pelajaran di AKHIR kalimat deskripsi dalam tanda kurung.
+        3. Contoh: "Menganalisis interaksi antar komponen ekosistem (mata pelajaran IPA)" atau "Mempresentasikan gagasan sebagai solusi pemecahan masalah (mata pelajaran Bahasa Indonesia)".
+        `;
+    } else {
+        // CASE B: 7KAIH / KARAKTER / LAINNYA
+        specificInstruction = `
+        MODUS: GERAKAN PEMBIASAAN / KARAKTER (Misal: 7KAIH)
+        Aturan Penulisan "description":
+        1. Tujuan harus berupa pembiasaan, rutinitas, atau pemahaman manfaat.
+        2. JANGAN menuliskan nama mata pelajaran di dalam teks deskripsi. Teks harus bersih. Contoh: "Memahami manfaat berolahraga bagi tubuh." atau "Pembiasaan kegiatan berolahraga".
+        3. PENTING: Meskipun tidak ditulis di deskripsi, kamu TETAP WAJIB mengisi array "subjects" dengan mapel yang berelasi (Misal: PJOK untuk olahraga, Agama untuk ibadah).
+        `;
+    }
+
     const prompt = `
-    Tema: "${theme}". Dimensi: ${dimensions.join(', ')}. Format: ${format}.
+    Tema: "${theme}". Dimensi: ${dimensions.join(', ')}. Format: "${format}".
+    Fase/Jenjang: "${phase}".
+    
+    DAFTAR MATA PELAJARAN YANG TERSEDIA DI FASE INI (PILIH DARI SINI SAJA):
+    ${allowedSubjects.join(', ')}
+
+    ${specificInstruction}
+
     Tugas: Rumuskan 3-4 Tujuan Projek.
-    Aturan: Subject (Mapel) harus relevan.
-    Output JSON: [{ "id": "1", "description": "Murid mampu...", "subjects": ["Mapel A", "Mapel B"] }]
+    
+    Output JSON: [{ "id": "1", "description": "Isi sesuai aturan modus di atas...", "subjects": ["Mapel A", "Mapel B"] }]
     `;
 
     const result = await generateWithRetry<ProjectGoal[]>(
@@ -293,6 +329,7 @@ export const draftProjectGoals = async (theme: string, dimensions: Dimension[], 
         (data) => {
             if (!Array.isArray(data)) return { isValid: false, error: "Output bukan Array" };
             if (data.length === 0) return { isValid: false, error: "Data kosong" };
+            
             return { isValid: true };
         },
         { responseMimeType: "application/json" }
@@ -347,38 +384,63 @@ export const generateActivityPlan = async (totalJp: number, theme: string, goals
 
 // --- FINALIZATION: Uses gemini-3-flash-preview specifically ---
 export const generateHiddenSections = async (project: ProjectState): Promise<Partial<ProjectState>> => {
+    // Pass the existing structure to be filled out
+    const activityContext = project.activities.map(a => `- ${a.name} (${a.jp} JP): ${a.description}`).join('\n');
+
     const prompt = `
     Data Projek: ${project.title}
     Tema: ${project.selectedTheme}
     Dimensi: ${project.selectedDimensions.join(', ')}
+    Konsep Dasar (Deskripsi): ${project.projectDescription || "-"}
     
-    Tugas: Lengkapi dokumen kokurikuler dengan narasi akademik dan rubrik penilaian detil.
+    Daftar Aktivitas Awal:
+    ${activityContext}
+
+    Tugas 1: Lengkapi dokumen kokurikuler dengan narasi akademik untuk: Pedagogi, Lingkungan, Kemitraan, dan Digital.
+    Tugas 2: UNTUK SETIAP AKTIVITAS di atas, buatkan MICRO STEPS (Langkah-langkah mikro/detail) yang sangat operasional (5-10 poin per aktivitas). Langkah harus detil (Misal: Guru membuka..., Siswa melakukan..., Guru menutup...).
+    Tugas 3: Buatkan rubrik penilaian detil.
     
-    Output WAJIB JSON Object dengan struktur persis ini (tanpa markdown code block tambahan di dalam string):
+    PERMINTAAN FORMAT ISI (WAJIB DIIKUTI):
+    1. "pedagogicalStrategy" (Praktik Pedagogis): Gunakan format list (dipisahkan baris baru \\n) yang berisi:
+       - Pendekatan pembelajaran
+       - Model pembelajaran (PBL/Inquiry/dll)
+       - Strategi sesuai karakteristik siswa
+    2. "learningEnvironment" (Lingkungan Belajar): Gunakan format list (\\n) berisi:
+       - Pengaturan kelas/kelompok
+       - Kondisi belajar yang dibangun
+       - PENTING: Harus sinkron dengan 'activityLocations'. Jika lokasi di luar kelas, lingkungan belajar harus mendeskripsikan kondisi luar tersebut.
+    3. "activityLocations" (Lokasi Kegiatan): List JSON String Array. Contoh: ["Kelas", "Halaman Sekolah", "Taman Kota"].
+    4. "partnerships" (Kemitraan): Gunakan format list (\\n) berisi:
+       - Mitra eksternal/Narasumber
+       - Pelibatan Orang Tua
+       - Peran Masyarakat
+    5. "digitalTools" (Digital): Gunakan format list (\\n) berisi:
+       - Platform/Aplikasi
+       - Media Digital (Video/Presentasi)
+    
+    Output WAJIB JSON Object:
     {
       "activityLocations": ["Lokasi 1", "Lokasi 2"],
-      "pedagogicalStrategy": "Paragraf narasi...",
-      "learningEnvironment": "Paragraf narasi...",
-      "partnerships": "Narasi kemitraan...",
-      "digitalTools": "Narasi alat digital...",
+      "pedagogicalStrategy": "Pendekatan: ... \\nModel: ... \\nStrategi: ...", 
+      "learningEnvironment": "Lokasi: ... \\nSetting Kelas: ...",
+      "partnerships": "Mitra: ... \\nOrang Tua: ...",
+      "digitalTools": "Platform: ... \\nMedia: ...",
       "assessmentPlan": "Narasi rencana asesmen...",
+      "activities": [
+         {
+           "id": "ID_SAMA", 
+           "steps": ["1. Guru...", "2. Siswa..."]
+         }
+      ],
       "assessmentRubrics": [
          {
-           "dimensionName": "Nama Dimensi (Sesuai Input)",
+           "dimensionName": "Nama Dimensi",
            "rubrics": [
-             { 
-               "aspect": "Aspek penilaian",
-               "score1": "Deskripsi Mulai Berkembang",
-               "score2": "Deskripsi Sedang Berkembang",
-               "score3": "Deskripsi Berkembang Sesuai Harapan",
-               "score4": "Deskripsi Sangat Berkembang"
-             }
+             { "aspect": "...", "score1": "...", "score2": "...", "score3": "...", "score4": "..." }
            ]
          }
       ]
     }
-    
-    Buatkan rubrik untuk SEMUA dimensi yang dipilih: ${project.selectedDimensions.join(', ')}.
     `;
 
     const result = await generateWithRetry<Partial<ProjectState>>(
@@ -390,6 +452,11 @@ export const generateHiddenSections = async (project: ProjectState): Promise<Par
             // Critical Check: Assessment Rubrics
             if (!data.assessmentRubrics || !Array.isArray(data.assessmentRubrics)) {
                 return { isValid: false, error: "Rubrik penilaian hilang (Key: assessmentRubrics tidak ditemukan)" };
+            }
+
+            // Critical Check: Detailed Activities
+            if (!data.activities || !Array.isArray(data.activities)) {
+                 return { isValid: false, error: "Rincian aktivitas hilang (Key: activities array tidak ditemukan)" };
             }
             
             if (data.assessmentRubrics.length === 0) {
@@ -404,6 +471,19 @@ export const generateHiddenSections = async (project: ProjectState): Promise<Par
         },
         3
     );
+    
+    // Merge generated steps into original activities to preserve non-generated fields (like original type/jp if needed)
+    if (result && result.activities) {
+        const mergedActivities = project.activities.map((original, index) => {
+            // Try to find by ID, fallback to index
+            const generated = result.activities?.find((a: any) => a.id === original.id) || result.activities?.[index];
+            return {
+                ...original,
+                steps: generated?.steps || ["Kegiatan belum dirinci."]
+            };
+        });
+        result.activities = mergedActivities;
+    }
 
     return result || {};
 }

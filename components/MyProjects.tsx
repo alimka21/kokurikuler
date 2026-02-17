@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { ProjectState } from '../types';
 import Swal from 'sweetalert2';
+import { generateAnnualProgramDocx } from '../utils/docxGenerator';
 
 // Helper to determine classes based on Phase (Simplified for Duplication Modal)
 const getClassesForPhase = (phase: string) => {
@@ -30,11 +31,11 @@ const getClassesForPhase = (phase: string) => {
 interface ProjectCardProps {
   project: ProjectState;
   onLoad: () => void;
-  onViewAnnual: () => void;
   onDuplicate: () => void;
+  onDownloadAnnual: () => void;
 }
 
-const ProjectCard: React.FC<ProjectCardProps> = ({ project, onLoad, onViewAnnual, onDuplicate }) => {
+const ProjectCard: React.FC<ProjectCardProps> = ({ project, onLoad, onDuplicate, onDownloadAnnual }) => {
   // Simple random image based on theme string length to keep it deterministic but varied
   const images = [
       "https://images.unsplash.com/photo-1509062522246-3755977927d7?q=80&w=2604&auto=format&fit=crop",
@@ -92,13 +93,17 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onLoad, onViewAnnual
           <ArrowRight className="w-4 h-4" />
           <span>Buka</span>
         </button>
-        {/* <button 
-          onClick={onViewAnnual}
-          className="col-span-2 bg-slate-50 hover:bg-slate-100 text-slate-600 font-bold py-2 rounded-xl text-xs transition-all flex items-center justify-center gap-2"
-        >
-          <TableIcon className="w-3.5 h-3.5" />
-          <span>Lihat Program Tahunan</span>
-        </button> */}
+        {/* Available when completed */}
+        {!!project.assessmentPlan && (
+            <button 
+            onClick={(e) => { e.stopPropagation(); onDownloadAnnual(); }}
+            className="col-span-2 bg-slate-50 hover:bg-teal-500 hover:text-white text-slate-600 font-bold py-2 rounded-xl text-xs transition-all flex items-center justify-center gap-2 border border-transparent hover:border-teal-400"
+            title="Download Program Tahunan"
+            >
+            <TableIcon className="w-3.5 h-3.5" />
+            <span>Program Tahunan</span>
+            </button>
+        )}
       </div>
     </div>
   </div>
@@ -123,6 +128,23 @@ const MyProjects: React.FC<MyProjectsProps> = ({ onNewProject, savedProjects, on
       if (duplicateModal) {
           onDuplicateProject(duplicateModal.projectId, newClass, duplicateModal.phase);
           setDuplicateModal(null);
+      }
+  };
+
+  const handleDownloadAnnual = async (proj: ProjectState) => {
+      try {
+          // Filter related projects (Same class)
+          const classmates = savedProjects.filter(p => p.targetClass === proj.targetClass);
+          await generateAnnualProgramDocx(proj, classmates);
+          Swal.fire({
+              icon: 'success',
+              title: 'Berhasil Unduh',
+              text: 'Program Tahunan telah diunduh.',
+              timer: 1500,
+              showConfirmButton: false
+          });
+      } catch (e) {
+          Swal.fire('Error', 'Gagal mengunduh dokumen.', 'error');
       }
   };
 
@@ -165,8 +187,8 @@ const MyProjects: React.FC<MyProjectsProps> = ({ onNewProject, savedProjects, on
                 key={proj.id}
                 project={proj}
                 onLoad={() => onLoadProject(proj.id)}
-                onViewAnnual={() => {}} // Not implemented in view only
                 onDuplicate={() => handleDuplicateClick(proj)}
+                onDownloadAnnual={() => handleDownloadAnnual(proj)}
             />
             ))}
         </div>

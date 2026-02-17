@@ -21,6 +21,116 @@ export const STEPS = [
   { id: 7, title: 'Finalisasi', icon: <FileCheck className="w-5 h-5" />, desc: 'Generate & Download' },
 ];
 
+// DATA MATA PELAJARAN SESUAI PDF (OCR REFERENCE)
+export const SUBJECTS_BY_PHASE: Record<string, string[]> = {
+  // SD (Fase A, B, C)
+  "Fase A": [
+    "Pendidikan Agama dan Budi Pekerti",
+    "Pendidikan Jasmani Olahraga dan Kesehatan (PJOK)",
+    "Bahasa Inggris",
+    "Koding dan Kecerdasan Artifisial (KKA)",
+    "Pendidikan Pancasila",
+    "Bahasa Indonesia",
+    "Matematika",
+    "Seni dan Budaya",
+    "Muatan Lokal"
+  ],
+  "Fase B": [
+    "Pendidikan Agama dan Budi Pekerti",
+    "Pendidikan Jasmani Olahraga dan Kesehatan (PJOK)",
+    "Bahasa Inggris",
+    "Koding dan Kecerdasan Artifisial (KKA)",
+    "Pendidikan Pancasila",
+    "Bahasa Indonesia",
+    "Matematika",
+    "Seni dan Budaya",
+    "Ilmu Pengetahuan Alam dan Sosial (IPAS)",
+    "Muatan Lokal"
+  ],
+  "Fase C": [
+    "Pendidikan Agama dan Budi Pekerti",
+    "Pendidikan Jasmani Olahraga dan Kesehatan (PJOK)",
+    "Bahasa Inggris",
+    "Koding dan Kecerdasan Artifisial (KKA)",
+    "Pendidikan Pancasila",
+    "Bahasa Indonesia",
+    "Matematika",
+    "Seni dan Budaya",
+    "Ilmu Pengetahuan Alam dan Sosial (IPAS)",
+    "Muatan Lokal"
+  ],
+  
+  // SMP (Fase D)
+  "Fase D": [
+    "Pendidikan Agama dan Budi Pekerti",
+    "Pendidikan Pancasila",
+    "Bahasa Indonesia",
+    "Matematika",
+    "Ilmu Pengetahuan Alam",
+    "Ilmu Pengetahuan Sosial",
+    "Bahasa Inggris",
+    "Pendidikan Jasmani Olahraga dan Kesehatan (PJOK)",
+    "Informatika",
+    "Seni Budaya",
+    "Koding dan Kecerdasan Artifisial (KKA)",
+    "Muatan Lokal"
+  ],
+
+  // SMA (Fase E, F)
+  "Fase E": [
+    "Pendidikan Agama dan Budi Pekerti",
+    "Pendidikan Pancasila",
+    "Bahasa Indonesia",
+    "Matematika",
+    "Ilmu Pengetahuan Alam",
+    "Ilmu Pengetahuan Sosial",
+    "Fisika",
+    "Kimia",
+    "Biologi",
+    "Sosiologi",
+    "Ekonomi",
+    "Geografi",
+    "Sejarah",
+    "Bahasa Inggris",
+    "PJOK",
+    "Seni Budaya",
+    "Koding dan Kecerdasan Artifisial (KKA)"
+  ],
+  "Fase F": [
+    "Pendidikan Agama dan Budi Pekerti",
+    "Pendidikan Pancasila",
+    "Bahasa Indonesia",
+    "Matematika",
+    "Fisika",
+    "Kimia",
+    "Biologi",
+    "Sosiologi",
+    "Ekonomi",
+    "Geografi",
+    "Antropologi",
+    "Bahasa Inggris",
+    "PJOK",
+    "Sejarah",
+    "Seni Budaya",
+    "Koding dan Kecerdasan Artifisial (KKA)"
+  ]
+};
+
+// Fallback if Phase isn't matched
+export const DEFAULT_SUBJECTS = [
+    "Pendidikan Agama dan Budi Pekerti",
+    "Pendidikan Pancasila",
+    "Bahasa Indonesia",
+    "Matematika",
+    "Ilmu Pengetahuan Alam",
+    "Ilmu Pengetahuan Sosial",
+    "Bahasa Inggris",
+    "PJOK",
+    "Informatika",
+    "Seni Budaya",
+    "Muatan Lokal"
+];
+
 export const ANALYSIS_OPTIONS = {
   curriculum: {
     goals: [

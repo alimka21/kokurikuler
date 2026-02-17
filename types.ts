@@ -33,6 +33,7 @@ export interface Activity {
   type: string;
   jp: number;
   description: string;
+  steps?: string[]; // New: Detailed steps generated in finalization
 }
 
 export interface ProjectGoal {

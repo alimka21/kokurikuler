@@ -25,7 +25,7 @@ const formatDateIndo = (dateStr: string) => {
     return date.toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
 };
 
-// Common Border Style for the "Form" look
+// Common Border Style
 const tableBorder = {
     top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
     bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
@@ -35,32 +35,100 @@ const tableBorder = {
     insideVertical: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
 };
 
+// Common Cell Margins (Padding) - INCREASED for better readability
+const defaultCellMargin = {
+    top: 144,    // ~2.5mm
+    bottom: 144, // ~2.5mm
+    left: 144,   // ~2.5mm
+    right: 144   // ~2.5mm
+};
+
+// Helper for Alphabet Indexing (0 -> A, 1 -> B, etc.)
+const getAlphabetIndex = (index: number) => {
+    return String.fromCharCode(65 + index); // 65 is 'A'
+};
+
+// Helper: Convert string with newlines to Bullet List Paragraphs (Simple Bullet)
+const formatListToParagraphs = (text: string | undefined): Paragraph[] => {
+    if (!text) return [new Paragraph({ children: [new TextRun({ text: "-", font: "Times New Roman", size: 24 })] })];
+    
+    // Split by newline and filter empty strings
+    const lines = text.split('\n').filter(line => line.trim().length > 0);
+    
+    if (lines.length === 0) return [new Paragraph({ children: [new TextRun({ text: "-", font: "Times New Roman", size: 24 })] })];
+
+    // Check if it looks like a list (contains - or 1.) or just assume newlines = list
+    return lines.map(line => {
+        // Clean leading indicators like "- ", "* ", "1. " if present to avoid double bullets
+        const cleanLine = line.replace(/^[-•*]\s*/, '').replace(/^\d+\.\s*/, '').trim();
+        
+        return new Paragraph({
+            children: [new TextRun({ text: cleanLine, font: "Times New Roman", size: 24 })],
+            bullet: { level: 0 } // Create actual docx bullet
+        });
+    });
+};
+
+// Helper: Convert Array of Strings to Numbered List Paragraphs
+const formatArrayToNumberedList = (items: string[] | undefined): Paragraph[] => {
+    if (!items || items.length === 0) {
+        return [new Paragraph({ children: [new TextRun({ text: "-", font: "Times New Roman", size: 24 })] })];
+    }
+
+    return items.map((item, i) => new Paragraph({
+        children: [new TextRun({ text: `${i + 1}. ${item}`, font: "Times New Roman", size: 24 })],
+        spacing: { after: 120 }
+    }));
+};
+
 // --- MODUL PROJEK (Single Project) ---
 export const generateAndDownloadDocx = async (project: ProjectState) => {
     
     // 1. Prepare Content Helpers
-    const createBoldText = (text: string) => new Paragraph({ children: [new TextRun({ text, bold: true, font: "Times New Roman", size: 24 })] });
-    // Fix: Remove explicit AlignmentType annotation to let TS infer or accept default
+    const createBoldText = (text: string) => new Paragraph({ children: [new TextRun({ text, bold: true, font: "Times New Roman", size: 24 })], alignment: AlignmentType.CENTER });
+    
     const createText = (text: string, align: any = AlignmentType.LEFT) => new Paragraph({ 
         children: [new TextRun({ text, font: "Times New Roman", size: 24 })], 
         alignment: align 
     });
 
-    // Helper: Create a standard label-value row for the main tables
-    const createRow = (label: string, value: string) => new TableRow({
-        children: [
-            new TableCell({
-                width: { size: 30, type: WidthType.PERCENTAGE },
-                children: [new Paragraph({ children: [new TextRun({ text: label, bold: true, font: "Times New Roman", size: 24 })] })],
-                verticalAlign: VerticalAlign.CENTER,
-            }),
-            new TableCell({
-                 width: { size: 70, type: WidthType.PERCENTAGE },
-                 children: [new Paragraph({ children: [new TextRun({ text: value || "-", font: "Times New Roman", size: 24 })] })],
-                 verticalAlign: VerticalAlign.CENTER,
-            }),
-        ]
+    const createCenteredText = (text: string) => new Paragraph({ 
+        children: [new TextRun({ text, font: "Times New Roman", size: 24 })], 
+        alignment: AlignmentType.CENTER
     });
+    
+    const createCenteredBoldText = (text: string) => new Paragraph({ 
+        children: [new TextRun({ text, font: "Times New Roman", size: 24, bold: true })], 
+        alignment: AlignmentType.CENTER
+    });
+
+    // Helper: Create a standard label-value row for the main tables
+    const createRow = (label: string, content: string | Paragraph[]) => {
+        let contentChildren: Paragraph[] = [];
+        
+        if (typeof content === 'string') {
+            contentChildren = [new Paragraph({ children: [new TextRun({ text: content || "-", font: "Times New Roman", size: 24 })] })];
+        } else {
+            contentChildren = content;
+        }
+
+        return new TableRow({
+            children: [
+                new TableCell({
+                    width: { size: 30, type: WidthType.PERCENTAGE },
+                    children: [new Paragraph({ children: [new TextRun({ text: label, bold: true, font: "Times New Roman", size: 24 })] })],
+                    verticalAlign: VerticalAlign.TOP,
+                    margins: defaultCellMargin,
+                }),
+                new TableCell({
+                     width: { size: 70, type: WidthType.PERCENTAGE },
+                     children: contentChildren,
+                     verticalAlign: VerticalAlign.TOP,
+                     margins: defaultCellMargin,
+                }),
+            ]
+        });
+    };
 
     // Helper: Header Row for tables
     const createHeaderRow = (text: string) => new TableRow({
@@ -73,51 +141,80 @@ export const generateAndDownloadDocx = async (project: ProjectState) => {
                 })],
                 shading: { fill: "E2E8F0" },
                 verticalAlign: VerticalAlign.CENTER,
+                margins: defaultCellMargin,
             })
         ]
     });
 
-    // Data Processing
-    const goalsList = project.projectGoals.map((g, i) => `${i+1}. ${g.description}`).join('\n');
+    // --- DATA PROCESSING ---
+
+    // 1. Dimensions (Numbered List)
+    const dimensionParagraphs = formatArrayToNumberedList(project.selectedDimensions);
+
+    // 2. Goals (Numbered List)
+    const goalParagraphs = project.projectGoals.length > 0
+        ? project.projectGoals.map((g, i) => new Paragraph({
+            children: [new TextRun({ text: `${i + 1}. ${g.description}`, font: "Times New Roman", size: 24 })],
+            spacing: { after: 120 }
+        }))
+        : [new Paragraph({ children: [new TextRun({ text: "-", font: "Times New Roman", size: 24 })] })];
+
+    // 3. Location (Numbered List)
+    const locationParagraphs = formatArrayToNumberedList(project.activityLocations);
+
+    // 4. Subjects (Unique & Numbered)
+    const uniqueSubjects = Array.from(new Set(project.projectGoals.flatMap(g => g.subjects)));
+    const subjectParagraphs = formatArrayToNumberedList(uniqueSubjects);
+
+    // 5. Full Description (Simplified: NO Context Analysis)
+    const fullDescription = project.projectDescription || "Belum ada deskripsi.";
+
+    // 6. Activities List (Formatted like PDF: A. Title (JP) -> 1. Steps...)
+    const activityParagraphs: Paragraph[] = [];
     
-    // Generated Locations (array -> string)
-    // Fix: Remove activityLocation property access as it is removed from types
-    const locationString = project.activityLocations && project.activityLocations.length > 0 
-        ? project.activityLocations.join(", ") 
-        : "-";
-
-    // Full Description: Creative Description + Analysis Summary
-    const fullDescription = project.projectDescription 
-        ? `${project.projectDescription}\n\nAnalisis Konteks:\n${project.analysisSummary || ""}`
-        : (project.analysisSummary || "Belum ada deskripsi.");
-
-    // Activities List (Numbered)
-    const activityParagraphs = project.activities.map((act, i) => 
-        new Paragraph({ 
-            children: [new TextRun({ text: `${i+1}. ${act.name} (${act.jp} JP)`, font: "Times New Roman", size: 24, bold: true })],
-            spacing: { after: 100 }
-        })
-    );
-    // Add descriptions to activities
-    project.activities.forEach((act) => {
-        activityParagraphs.push(new Paragraph({
-            children: [new TextRun({ text: act.description, font: "Times New Roman", size: 24 })],
-            indent: { left: 360 }, // Indent description
-            spacing: { after: 200 }
+    project.activities.forEach((act, i) => {
+        // A. Header Row (Bold)
+        const alphabet = getAlphabetIndex(i);
+        activityParagraphs.push(new Paragraph({ 
+            children: [new TextRun({ text: `${alphabet}. ${act.name} (${act.jp} JP)`, font: "Times New Roman", size: 24, bold: true })],
+            spacing: { before: 240, after: 120 }
         }));
+        
+        // Detailed Steps (Numbered List)
+        if (act.steps && act.steps.length > 0) {
+            act.steps.forEach((step, stepIdx) => {
+                // Remove existing numbering if AI included it (e.g., "1. Guru...")
+                const cleanStep = step.replace(/^\d+[\.\)]\s*/, '');
+                
+                activityParagraphs.push(new Paragraph({
+                    children: [new TextRun({ text: `${stepIdx + 1}. ${cleanStep}`, font: "Times New Roman", size: 24 })],
+                    indent: { left: 360 }, // Indent to align with text above
+                    spacing: { after: 60 }
+                }));
+            });
+        } else {
+            // Fallback if steps not generated yet or empty
+            activityParagraphs.push(new Paragraph({
+                children: [new TextRun({ text: act.description || "Belum ada rincian.", font: "Times New Roman", size: 24 })],
+                indent: { left: 360 }, 
+                spacing: { after: 120 }
+            }));
+        }
     });
 
-    // Assessment Rows
+    if (activityParagraphs.length === 0) activityParagraphs.push(new Paragraph("-"));
+
+    // 7. Assessment Rows (Fixed Order: Dimension | Aspect | SB | B | C | K)
     const assessmentRows: TableRow[] = [
         new TableRow({
             tableHeader: true,
             children: [
-                new TableCell({ children: [createBoldText("Dimensi Profil Lulusan")], verticalAlign: VerticalAlign.CENTER }),
-                new TableCell({ children: [createBoldText("Aspek yang Dinilai")], verticalAlign: VerticalAlign.CENTER }),
-                new TableCell({ children: [createBoldText("Kurang")], verticalAlign: VerticalAlign.CENTER }),
-                new TableCell({ children: [createBoldText("Cukup")], verticalAlign: VerticalAlign.CENTER }),
-                new TableCell({ children: [createBoldText("Baik")], verticalAlign: VerticalAlign.CENTER }),
-                new TableCell({ children: [createBoldText("Sangat Baik")], verticalAlign: VerticalAlign.CENTER }),
+                new TableCell({ children: [createBoldText("Dimensi")], verticalAlign: VerticalAlign.CENTER, margins: defaultCellMargin, shading: { fill: "E2E8F0" } }),
+                new TableCell({ children: [createBoldText("Aspek")], verticalAlign: VerticalAlign.CENTER, margins: defaultCellMargin, shading: { fill: "E2E8F0" } }),
+                new TableCell({ children: [createBoldText("Sangat Baik")], verticalAlign: VerticalAlign.CENTER, margins: defaultCellMargin, shading: { fill: "E2E8F0" } }),
+                new TableCell({ children: [createBoldText("Baik")], verticalAlign: VerticalAlign.CENTER, margins: defaultCellMargin, shading: { fill: "E2E8F0" } }),
+                new TableCell({ children: [createBoldText("Cukup")], verticalAlign: VerticalAlign.CENTER, margins: defaultCellMargin, shading: { fill: "E2E8F0" } }),
+                new TableCell({ children: [createBoldText("Kurang")], verticalAlign: VerticalAlign.CENTER, margins: defaultCellMargin, shading: { fill: "E2E8F0" } }),
             ]
         })
     ];
@@ -127,12 +224,12 @@ export const generateAndDownloadDocx = async (project: ProjectState) => {
             dimGroup.rubrics.forEach((rubric, index) => {
                 assessmentRows.push(new TableRow({
                     children: [
-                        new TableCell({ children: [createText(index === 0 ? dimGroup.dimensionName : "")] }),
-                        new TableCell({ children: [createText(rubric.aspect)] }),
-                        new TableCell({ children: [createText(rubric.score1)] }),
-                        new TableCell({ children: [createText(rubric.score2)] }),
-                        new TableCell({ children: [createText(rubric.score3)] }),
-                        new TableCell({ children: [createText(rubric.score4)] }),
+                        new TableCell({ children: [createText(index === 0 ? dimGroup.dimensionName : "")], margins: defaultCellMargin }),
+                        new TableCell({ children: [createText(rubric.aspect)], margins: defaultCellMargin }),
+                        new TableCell({ children: [createText(rubric.score4)], margins: defaultCellMargin }), // Sangat Baik
+                        new TableCell({ children: [createText(rubric.score3)], margins: defaultCellMargin }), // Baik
+                        new TableCell({ children: [createText(rubric.score2)], margins: defaultCellMargin }), // Cukup
+                        new TableCell({ children: [createText(rubric.score1)], margins: defaultCellMargin }), // Kurang
                     ]
                 }));
             });
@@ -141,12 +238,12 @@ export const generateAndDownloadDocx = async (project: ProjectState) => {
         // Fallback row
         assessmentRows.push(new TableRow({
             children: [
-                 new TableCell({ children: [createText("-")] }), 
-                 new TableCell({ children: [createText("-")] }),
-                 new TableCell({ children: [createText("")] }), 
-                 new TableCell({ children: [createText("")] }),
-                 new TableCell({ children: [createText("")] }), 
-                 new TableCell({ children: [createText("")] })
+                 new TableCell({ children: [createText("-")], margins: defaultCellMargin }), 
+                 new TableCell({ children: [createText("-")], margins: defaultCellMargin }),
+                 new TableCell({ children: [createText("")], margins: defaultCellMargin }), 
+                 new TableCell({ children: [createText("")], margins: defaultCellMargin }),
+                 new TableCell({ children: [createText("")], margins: defaultCellMargin }), 
+                 new TableCell({ children: [createText("")], margins: defaultCellMargin })
             ]
         }));
     }
@@ -157,7 +254,7 @@ export const generateAndDownloadDocx = async (project: ProjectState) => {
                 id: "Normal",
                 name: "Normal",
                 run: { font: "Times New Roman", size: 24 }, // Size 24 = 12pt
-                paragraph: { spacing: { line: 360 } } // 1.5 Spacing (240 = 1 line, 360 = 1.5)
+                paragraph: { spacing: { line: 360 } } // 1.5 Spacing
             }]
         },
         sections: [{
@@ -165,26 +262,27 @@ export const generateAndDownloadDocx = async (project: ProjectState) => {
                 page: {
                     size: {
                         orientation: PageOrientation.PORTRAIT,
-                        width: 11906, // A4 Width in Twips
-                        height: 16838, // A4 Height in Twips
+                        width: 11906, // A4 Width
+                        height: 16838, // A4 Height
                     },
-                    margin: { top: 1440, right: 1440, bottom: 1440, left: 1440 } // 1 inch margins
+                    margin: { top: 1440, right: 1440, bottom: 1440, left: 1440 }
                 }
             },
             children: [
-                // TITLE
+                // TITLE (18pt = 36 half-points, Bold, Black)
                 new Paragraph({
                     text: "MODUL PROJEK",
                     heading: HeadingLevel.HEADING_1,
                     alignment: AlignmentType.CENTER,
-                    run: { font: "Times New Roman", bold: true, size: 28 },
+                    run: { font: "Times New Roman", bold: true, size: 36, color: "000000" }, // 18pt
                     spacing: { after: 100 }
                 }),
+                // SCHOOL NAME (14pt = 28 half-points, Black)
                 new Paragraph({
                     text: project.schoolName.toUpperCase(),
                     heading: HeadingLevel.HEADING_2,
                     alignment: AlignmentType.CENTER,
-                    run: { font: "Times New Roman", bold: true, size: 28 },
+                    run: { font: "Times New Roman", size: 28, color: "000000" }, // 14pt (Not bold per request)
                     spacing: { after: 400 }
                 }),
 
@@ -198,7 +296,8 @@ export const generateAndDownloadDocx = async (project: ProjectState) => {
                         createRow("Ide Projek", project.title === "MODUL PROJEK" ? "-" : project.title),
                         createRow("Kelas", project.targetClass),
                         createRow("Alokasi Waktu (JP)", `${project.projectJpAllocation} JP`),
-                        createRow("Lokasi Kegiatan", locationString),
+                        createRow("Mata Pelajaran Terkait", subjectParagraphs),
+                        createRow("Lokasi Kegiatan", locationParagraphs),
                     ],
                 }),
                 new Paragraph({ text: "" }),
@@ -215,8 +314,9 @@ export const generateAndDownloadDocx = async (project: ProjectState) => {
                                     columnSpan: 2,
                                     children: [new Paragraph({ 
                                         children: [new TextRun({ text: fullDescription, font: "Times New Roman", size: 24 })],
-                                        spacing: { before: 100, after: 100 }
-                                    })]
+                                        spacing: { before: 120, after: 120 }
+                                    })],
+                                    margins: defaultCellMargin
                                 })
                             ]
                         })
@@ -229,12 +329,12 @@ export const generateAndDownloadDocx = async (project: ProjectState) => {
                     width: { size: 100, type: WidthType.PERCENTAGE },
                     borders: tableBorder,
                     rows: [
-                        createRow("Dimensi Profil Lulusan", project.selectedDimensions.join(", ")),
-                        createRow("Tujuan Projek", goalsList),
-                        createRow("Praktik Pedagogis", project.pedagogicalStrategy),
-                        createRow("Lingkungan Belajar", project.learningEnvironment),
-                        createRow("Kemitraan Belajar", project.partnerships || "-"),
-                        createRow("Pemanfaatan Digital", project.digitalTools),
+                        createRow("Dimensi Profil Lulusan", dimensionParagraphs),
+                        createRow("Tujuan Projek", goalParagraphs),
+                        createRow("Praktik Pedagogis", formatListToParagraphs(project.pedagogicalStrategy)),
+                        createRow("Lingkungan Belajar", formatListToParagraphs(project.learningEnvironment)),
+                        createRow("Kemitraan Belajar", formatListToParagraphs(project.partnerships)),
+                        createRow("Pemanfaatan Digital", formatListToParagraphs(project.digitalTools)),
                     ],
                 }),
                 new Paragraph({ text: "" }),
@@ -249,7 +349,8 @@ export const generateAndDownloadDocx = async (project: ProjectState) => {
                             children: [
                                 new TableCell({
                                     columnSpan: 2,
-                                    children: activityParagraphs.length > 0 ? activityParagraphs : [new Paragraph("-")]
+                                    children: activityParagraphs,
+                                    margins: defaultCellMargin
                                 })
                             ]
                         })
@@ -257,11 +358,11 @@ export const generateAndDownloadDocx = async (project: ProjectState) => {
                 }),
                 new Paragraph({ text: "" }),
 
-                // TABLE 5: ASESMEN PROJEK
+                // TABLE 5: ASESMEN PROJEK (14pt Bold Header, Black)
                 new Paragraph({
                     text: "Asesmen Projek",
                     alignment: AlignmentType.CENTER,
-                    run: { font: "Times New Roman", bold: true, size: 24 },
+                    run: { font: "Times New Roman", bold: true, size: 28, color: "000000" }, // 14pt
                     spacing: { after: 100 }
                 }),
                 new Table({
@@ -272,7 +373,7 @@ export const generateAndDownloadDocx = async (project: ProjectState) => {
                 new Paragraph({ text: "" }),
                 new Paragraph({ text: "" }),
 
-                // SIGNATURES
+                // SIGNATURES (50% - 50% split, All Centered)
                 new Table({
                     width: { size: 100, type: WidthType.PERCENTAGE },
                     borders: { top: { style: BorderStyle.NONE }, bottom: { style: BorderStyle.NONE }, left: { style: BorderStyle.NONE }, right: { style: BorderStyle.NONE }, insideHorizontal: { style: BorderStyle.NONE }, insideVertical: { style: BorderStyle.NONE } },
@@ -280,22 +381,26 @@ export const generateAndDownloadDocx = async (project: ProjectState) => {
                         new TableRow({
                             children: [
                                 new TableCell({
+                                    width: { size: 50, type: WidthType.PERCENTAGE },
                                     children: [
-                                        createText("Mengetahui,"),
-                                        createText("Kepala Sekolah"),
+                                        createCenteredText("Mengetahui,"),
+                                        createCenteredText("Kepala Sekolah"),
                                         new Paragraph({ text: "" }), new Paragraph({ text: "" }), new Paragraph({ text: "" }),
-                                        createBoldText(project.principalName || "........................."),
-                                        createText(`NIP. ${project.principalNip || "........................."}`),
-                                    ]
+                                        createCenteredBoldText(project.principalName || "........................."),
+                                        createCenteredText(`NIP. ${project.principalNip || "........................."}`),
+                                    ],
+                                    margins: defaultCellMargin
                                 }),
                                 new TableCell({
+                                    width: { size: 50, type: WidthType.PERCENTAGE },
                                     children: [
-                                        createText(`${project.signaturePlace}, ${formatDateIndo(project.signatureDate)}`),
-                                        createText("Koordinator Projek"),
+                                        createCenteredText(`${project.signaturePlace}, ${formatDateIndo(project.signatureDate)}`),
+                                        createCenteredText("Koordinator Projek"),
                                         new Paragraph({ text: "" }), new Paragraph({ text: "" }), new Paragraph({ text: "" }),
-                                        createBoldText(project.coordinatorName || "........................."),
-                                        createText(`NIP. ${project.coordinatorNip || "........................."}`),
-                                    ]
+                                        createCenteredBoldText(project.coordinatorName || "........................."),
+                                        createCenteredText(`NIP. ${project.coordinatorNip || "........................."}`),
+                                    ],
+                                    margins: defaultCellMargin
                                 })
                             ]
                         })
@@ -306,7 +411,6 @@ export const generateAndDownloadDocx = async (project: ProjectState) => {
     });
 
     const blob = await Packer.toBlob(doc);
-    // Safer saveAs execution
     const saveAs = (FileSaver && (FileSaver as any).saveAs) ? (FileSaver as any).saveAs : FileSaver;
     saveAs(blob, `Modul_Projek_${project.selectedTheme.replace(/\s+/g, '_')}.docx`);
 };
@@ -324,15 +428,12 @@ export const generateAnnualProgramDocx = async (primaryProject: ProjectState, re
     const totalAnnual = primaryProject.totalJpAnnual; 
     const remaining = Math.max(0, totalAnnual - totalAllocated);
 
-    // Common Cell (returning TableCell)
-    // Fix: Explicitly type alignment to avoid narrowing to 'left' literal
     const cell = (text: string, bold = false, align: any = AlignmentType.LEFT) => new TableCell({
         children: [new Paragraph({ children: [new TextRun({ text, bold, font: "Times New Roman", size: 24 })], alignment: align })],
         verticalAlign: VerticalAlign.CENTER,
+        margins: defaultCellMargin,
     });
 
-    // Helper for paragraphs (returning Paragraph)
-    // Fix: Explicitly type alignment to avoid narrowing to 'left' literal
     const para = (text: string, bold = false, align: any = AlignmentType.LEFT) => new Paragraph({
         children: [new TextRun({ text, bold, font: "Times New Roman", size: 24 })], 
         alignment: align
@@ -412,19 +513,19 @@ export const generateAnnualProgramDocx = async (primaryProject: ProjectState, re
                         ...projectRows,
                         new TableRow({
                             children: [
-                                new TableCell({ columnSpan: 7, children: [new Paragraph({ text: "Total Alokasi Waktu Terpakai", alignment: AlignmentType.RIGHT, run: { bold: true, font: "Times New Roman" } })] }),
+                                new TableCell({ columnSpan: 7, margins: defaultCellMargin, children: [new Paragraph({ text: "Total Alokasi Waktu Terpakai", alignment: AlignmentType.RIGHT, run: { bold: true, font: "Times New Roman" } })] }),
                                 cell(`${totalAllocated} JP`, true, AlignmentType.CENTER),
                             ]
                         }),
                         new TableRow({
                             children: [
-                                new TableCell({ columnSpan: 7, children: [new Paragraph({ text: "Total Beban Belajar Tahunan", alignment: AlignmentType.RIGHT, run: { bold: true, font: "Times New Roman" } })] }),
+                                new TableCell({ columnSpan: 7, margins: defaultCellMargin, children: [new Paragraph({ text: "Total Beban Belajar Tahunan", alignment: AlignmentType.RIGHT, run: { bold: true, font: "Times New Roman" } })] }),
                                 cell(`${totalAnnual} JP`, true, AlignmentType.CENTER),
                             ]
                         }),
                         new TableRow({
                             children: [
-                                new TableCell({ columnSpan: 7, children: [new Paragraph({ text: "Sisa Waktu", alignment: AlignmentType.RIGHT, run: { bold: true, font: "Times New Roman" } })] }),
+                                new TableCell({ columnSpan: 7, margins: defaultCellMargin, children: [new Paragraph({ text: "Sisa Waktu", alignment: AlignmentType.RIGHT, run: { bold: true, font: "Times New Roman" } })] }),
                                 cell(`${remaining} JP`, true, AlignmentType.CENTER),
                             ]
                         })
@@ -448,7 +549,8 @@ export const generateAnnualProgramDocx = async (primaryProject: ProjectState, re
                                         new Paragraph({ text: "" }), new Paragraph({ text: "" }),
                                         para(primaryProject.principalName || ".........................", true),
                                         para(`NIP. ${primaryProject.principalNip || "........................."}`),
-                                    ]
+                                    ],
+                                    margins: defaultCellMargin
                                 }),
                                 new TableCell({
                                     children: [
@@ -457,7 +559,8 @@ export const generateAnnualProgramDocx = async (primaryProject: ProjectState, re
                                         new Paragraph({ text: "" }), new Paragraph({ text: "" }),
                                         para(primaryProject.coordinatorName || ".........................", true),
                                         para(`NIP. ${primaryProject.coordinatorNip || "........................."}`),
-                                    ]
+                                    ],
+                                    margins: defaultCellMargin
                                 })
                             ]
                         })
@@ -468,7 +571,6 @@ export const generateAnnualProgramDocx = async (primaryProject: ProjectState, re
     });
 
     const blob = await Packer.toBlob(doc);
-    // Safer saveAs execution
     const saveAs = (FileSaver && (FileSaver as any).saveAs) ? (FileSaver as any).saveAs : FileSaver;
-    saveAs(blob, `Program_Tahunan_Kelas_${primaryProject.targetClass.replace(/\s+/g, '_')}.docx`);
+    saveAs(blob, `Program_Tahunan_${primaryProject.selectedTheme.replace(/\s+/g, '_')}.docx`);
 }
