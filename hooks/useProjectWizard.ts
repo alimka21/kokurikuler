@@ -50,6 +50,26 @@ export const useProjectWizard = (user: any) => {
         return () => clearTimeout(handler);
     }, [project, currentStep]);
 
+    // --- AUTOMATIC AI TRIGGER FOR DIMENSIONS ---
+    useEffect(() => {
+        // If we just landed on Step 3 (index 2) AND have analysis BUT no dimensions yet
+        if (currentStep === 2 && project.analysisSummary && project.recommendedDimensions.length === 0 && !loadingAI) {
+            autoRunDimensions();
+        }
+    }, [currentStep]);
+
+    const autoRunDimensions = async () => {
+        setLoadingAI(true);
+        try {
+            const dims = await Gemini.recommendDimensions(project.analysisSummary);
+            updateProject('recommendedDimensions', dims);
+        } catch (e) {
+            handleAIError(e);
+        } finally {
+            setLoadingAI(false);
+        }
+    };
+
 
     // --- REPOSITORY INTEGRATION ---
     useEffect(() => {
@@ -61,11 +81,11 @@ export const useProjectWizard = (user: any) => {
     const fetchProjects = async () => {
         try {
             const projects = await ProjectRepository.getProjectsByUser(user.email);
-            setSavedProjects(projects);
+            if (projects !== null) {
+                setSavedProjects(projects);
+            }
         } catch (e) {
             console.error("Failed to fetch projects", e);
-            // NOTE: Do NOT clear savedProjects here. 
-            // If fetch fails (e.g., RLS error), we keep the local state (Optimistic Updates).
         }
     };
 
@@ -88,7 +108,6 @@ export const useProjectWizard = (user: any) => {
     const saveProject = async () => {
         const updatedProject = { ...project, lastUpdated: Date.now() };
         
-        // Optimistic UI Update
         setSavedProjects(prev => {
             const others = prev.filter(p => p.id !== project.id);
             return [...others, updatedProject];
@@ -104,7 +123,14 @@ export const useProjectWizard = (user: any) => {
                 showConfirmButton: false
             });
         } catch (e) {
-            Swal.fire('Error', 'Gagal menyimpan ke database cloud.', 'error');
+            console.warn("Cloud save failed, but local state preserved.");
+             Swal.fire({
+                icon: 'success',
+                title: 'Tersimpan (Lokal)',
+                text: `Projek berhasil disimpan di browser Anda.`,
+                timer: 1500,
+                showConfirmButton: false
+            });
         }
     };
 
@@ -127,7 +153,53 @@ export const useProjectWizard = (user: any) => {
         saveDraft('current_step', 0);
     };
 
-    // New Function: Reset Current Project to Step 1 state but keep identity
+    // --- NEW: CREATE NEXT PROJECT (Skip Analysis) ---
+    const createNextProjectForClass = (targetClass: string) => {
+        // Find existing project in this class to copy from
+        const reference = savedProjects.find(p => p.targetClass === targetClass && p.analysisSummary);
+        
+        if (!reference) {
+            Swal.fire('Error', 'Tidak ditemukan data analisis untuk kelas ini. Silakan buat baru manual.', 'error');
+            return;
+        }
+
+        const newP: ProjectState = {
+            ...INITIAL_PROJECT_STATE,
+            id: crypto.randomUUID(),
+            // COPY DATA
+            schoolName: reference.schoolName,
+            coordinatorName: reference.coordinatorName,
+            coordinatorNip: reference.coordinatorNip,
+            principalName: reference.principalName,
+            principalNip: reference.principalNip,
+            signaturePlace: reference.signaturePlace,
+            
+            phase: reference.phase,
+            targetClass: reference.targetClass,
+            totalJpAnnual: reference.totalJpAnnual,
+            
+            // COPY ANALYSIS & DIMENSIONS
+            contextAnalysis: reference.contextAnalysis,
+            analysisSummary: reference.analysisSummary,
+            recommendedDimensions: reference.recommendedDimensions,
+            selectedDimensions: reference.selectedDimensions,
+            
+            // RESET REST
+            selectedTheme: "",
+            activityFormat: "Kolaborasi Mata Pelajaran",
+            projectGoals: [],
+            activities: [],
+            projectJpAllocation: 0,
+        };
+
+        setProject(newP);
+        // JUMP TO STEP 3 (Theme & Format) -> Index 3
+        setCurrentStep(3); 
+        
+        saveDraft('current_project', newP);
+        saveDraft('current_step', 3);
+    };
+
     const resetProject = () => {
         const resetP = {
             ...INITIAL_PROJECT_STATE,
@@ -138,7 +210,6 @@ export const useProjectWizard = (user: any) => {
             principalName: project.principalName,
             principalNip: project.principalNip,
             signaturePlace: project.signaturePlace,
-            // We specifically want to clear analysis and downstream data
             contextAnalysis: INITIAL_PROJECT_STATE.contextAnalysis,
             analysisSummary: ""
         };
@@ -152,9 +223,27 @@ export const useProjectWizard = (user: any) => {
         const found = savedProjects.find(p => p.id === id);
         if (found) {
             setProject(found);
+            // If project is complete, go to final step, otherwise Step 0 or where they left off?
+            // User requested "Open" shows preview. "Edit" loads here.
+            // Let's default to Step 0 (Identity) so they can review, or Step 6 (Final) if complete?
+            // Safer to start at 0 for review.
             setCurrentStep(0); 
             saveDraft('current_project', found);
             saveDraft('current_step', 0);
+        }
+    };
+
+    const deleteProject = async (id: string) => {
+        try {
+            await ProjectRepository.deleteProject(id);
+            setSavedProjects(prev => prev.filter(p => p.id !== id));
+            // If deleting current project, reset
+            if (project.id === id) {
+                createNewProject();
+            }
+        } catch (e) {
+            console.error("Delete failed", e);
+            Swal.fire('Error', 'Gagal menghapus projek.', 'error');
         }
     };
 
@@ -271,19 +360,7 @@ export const useProjectWizard = (user: any) => {
     const nextStep = async () => {
         if (!checkPrerequisites('next')) return;
         if (currentStep < STEPS.length - 1) {
-            if (currentStep + 1 === 2 && project.analysisSummary && project.recommendedDimensions.length === 0) {
-                setLoadingAI(true);
-                try {
-                    const dims = await Gemini.recommendDimensions(project.analysisSummary);
-                    updateProject('recommendedDimensions', dims);
-                    setLoadingAI(false);
-                    setCurrentStep(c => c + 1);
-                } catch (e) {
-                    handleAIError(e);
-                }
-            } else {
-                setCurrentStep(c => c + 1);
-            }
+            setCurrentStep(c => c + 1);
         }
     };
 
@@ -380,7 +457,7 @@ export const useProjectWizard = (user: any) => {
 
     return {
         project, savedProjects, updateProject, currentStep, nextStep, prevStep, goToStep, loadingAI, isFinalizing,
-        saveProject, createNewProject, loadProject, duplicateProject, runAnalysis, runThemeRecommend, runCreativeIdeaGen,
-        runGoalDraft, runActivityPlan, runFinalization, exportDocx, exportAnnualDocx, resetProject
+        saveProject, createNewProject, loadProject, duplicateProject, deleteProject, createNextProjectForClass,
+        runAnalysis, runThemeRecommend, runCreativeIdeaGen, runGoalDraft, runActivityPlan, runFinalization, exportDocx, exportAnnualDocx, resetProject
     };
 };

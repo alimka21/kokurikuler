@@ -2,6 +2,7 @@
 import React, { useState } from 'react';
 import { Wand2, CheckCircle, Download, Save, Eye, PlusCircle, AlertTriangle } from 'lucide-react';
 import { ProjectState } from '../../types';
+import DocumentPreview from '../common/DocumentPreview';
 
 interface Props {
     project: ProjectState;
@@ -20,30 +21,12 @@ const StepFinalization: React.FC<Props> = ({
     project,
     isReady, 
     isFinalizing, 
-    themeName, 
     onFinalize, 
-    onViewEditor, 
     onDownload,
-    onDownloadAnnual,
     onSaveProject,
     onReset
 }) => {
     
-    const [previewTab, setPreviewTab] = useState<'modul' | 'annual'>('modul');
-    
-    const formatDate = (d: string) => {
-        if (!d) return "";
-        return new Date(d).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
-    }
-
-    // Helper for Alphabet Indexing
-    const getAlphabetIndex = (index: number) => {
-        return String.fromCharCode(65 + index); // 65 is 'A'
-    };
-
-    // Derived unique subjects
-    const uniqueSubjects = Array.from(new Set(project.projectGoals.flatMap(g => g.subjects)));
-
     return (
         <div className="flex flex-col items-center justify-center py-4 max-w-6xl mx-auto w-full">
             {!isReady && !isFinalizing ? (
@@ -101,7 +84,6 @@ const StepFinalization: React.FC<Props> = ({
                                 <button onClick={onDownload} className="w-full px-6 py-4 bg-primary text-white rounded-xl font-semibold shadow-lg shadow-primary/25 hover:bg-primary-hover flex items-center justify-center gap-2 transition-all">
                                     <Download className="w-5 h-5" /> Unduh Modul (.docx)
                                 </button>
-                                {/* Download Annual removed here, available in My Projects */}
                             </div>
 
                             <div className="pt-4 border-t border-slate-100 grid grid-cols-1 gap-3">
@@ -124,183 +106,11 @@ const StepFinalization: React.FC<Props> = ({
                     </div>
 
                     {/* RIGHT COLUMN: PREVIEW */}
-                    <div className="lg:col-span-8">
-                        <div className="bg-slate-500/10 rounded-3xl p-6 sm:p-10 border border-slate-200/50 flex justify-center overflow-hidden min-h-[600px] relative inner-shadow">
-                             <div className="absolute top-4 right-4 bg-white/80 backdrop-blur px-3 py-1 rounded-full text-xs font-bold text-slate-500 flex items-center gap-1 z-10">
-                                <Eye className="w-3 h-3" /> Live Preview
-                             </div>
-
-                             {/* TAB 1: MODUL PROJEK (A4 PORTRAIT) */}
-                             {previewTab === 'modul' && (
-                                <div className="origin-top transition-all duration-300 ease-in-out shadow-2xl" style={{ transform: 'scale(0.65)', marginBottom: '-30%' }}>
-                                    <div 
-                                        className="bg-white text-black p-16 flex flex-col"
-                                        style={{ 
-                                            width: '595px', // Standard CSS px for A4 width ratio
-                                            minHeight: '842px', 
-                                            fontFamily: '"Times New Roman", Times, serif',
-                                            lineHeight: '1.5'
-                                        }}
-                                    >
-                                        <h1 className="text-center font-bold text-2xl mb-1">MODUL PROJEK</h1>
-                                        <h2 className="text-center font-bold text-xl uppercase">{project?.schoolName || "NAMA SEKOLAH"}</h2>
-
-                                        {/* Table 1: Identitas */}
-                                        <table className="w-full border-collapse border border-black mb-6 text-lg mt-8">
-                                            <thead>
-                                                <tr><th colSpan={2} className="border border-black bg-gray-200 p-2 text-center">Identitas Projek</th></tr>
-                                            </thead>
-                                            <tbody>
-                                                <tr><td className="border border-black p-2 font-bold w-1/3">Tema Projek</td><td className="border border-black p-2">{project?.selectedTheme}</td></tr>
-                                                <tr><td className="border border-black p-2 font-bold">Ide Projek</td><td className="border border-black p-2">{project?.title === "MODUL PROJEK" ? "-" : project?.title}</td></tr>
-                                                <tr><td className="border border-black p-2 font-bold">Kelas</td><td className="border border-black p-2">{project?.targetClass}</td></tr>
-                                                <tr><td className="border border-black p-2 font-bold">Alokasi Waktu</td><td className="border border-black p-2">{project?.projectJpAllocation} JP</td></tr>
-                                                {/* NEW ROW: Integrated Subjects */}
-                                                <tr>
-                                                    <td className="border border-black p-2 font-bold align-top">Mata Pelajaran Terkait</td>
-                                                    <td className="border border-black p-2 align-top">
-                                                         {uniqueSubjects.length > 0 ? (
-                                                            <ol className="list-decimal pl-5 m-0 space-y-1">
-                                                                {uniqueSubjects.map(s => <li key={s}>{s}</li>)}
-                                                            </ol>
-                                                         ) : "-"}
-                                                    </td>
-                                                </tr>
-                                                {/* UPDATED ROW: Locations as Numbered List */}
-                                                <tr>
-                                                    <td className="border border-black p-2 font-bold align-top">Lokasi Kegiatan</td>
-                                                    <td className="border border-black p-2 align-top">
-                                                        {project?.activityLocations && project.activityLocations.length > 0 ? (
-                                                            <ol className="list-decimal pl-5 m-0 space-y-1">
-                                                                {project.activityLocations.map((loc, idx) => (
-                                                                    <li key={idx}>{loc}</li>
-                                                                ))}
-                                                            </ol>
-                                                        ) : "-"}
-                                                    </td>
-                                                </tr>
-                                            </tbody>
-                                        </table>
-
-                                        {/* Table 2: Deskripsi (Simplified: NO Context Analysis) */}
-                                        <table className="w-full border-collapse border border-black mb-6 text-lg">
-                                            <thead>
-                                                <tr><th className="border border-black bg-gray-200 p-2 text-center">Deskripsi Singkat Projek</th></tr>
-                                            </thead>
-                                            <tbody>
-                                                <tr><td className="border border-black p-3">{project?.projectDescription || "Belum ada deskripsi."}</td></tr>
-                                            </tbody>
-                                        </table>
-
-                                        {/* Table 3: Detail */}
-                                        <table className="w-full border-collapse border border-black mb-6 text-lg">
-                                            <tbody>
-                                                <tr>
-                                                    <td className="border border-black p-2 font-bold w-1/3 align-top">Dimensi Profil Lulusan</td>
-                                                    <td className="border border-black p-2 align-top">
-                                                        <ol className="list-decimal pl-5 m-0 space-y-2">
-                                                            {project?.selectedDimensions.map(d => (
-                                                                <li key={d}>{d}</li>
-                                                            ))}
-                                                        </ol>
-                                                    </td>
-                                                </tr>
-                                                <tr>
-                                                    <td className="border border-black p-2 font-bold align-top">Tujuan Projek</td>
-                                                    <td className="border border-black p-2 align-top">
-                                                        <ol className="list-decimal pl-5 m-0 space-y-2">
-                                                            {project?.projectGoals.map(g => (
-                                                                <li key={g.id}>{g.description}</li>
-                                                            ))}
-                                                        </ol>
-                                                    </td>
-                                                </tr>
-                                            </tbody>
-                                        </table>
-                                        
-                                        {/* Table 4: Kegiatan (Updated to match detailed format) */}
-                                        <table className="w-full border-collapse border border-black mb-6 text-lg">
-                                            <thead>
-                                                <tr><th className="border border-black bg-gray-200 p-2 text-center">Kegiatan Projek</th></tr>
-                                            </thead>
-                                            <tbody>
-                                                <tr>
-                                                    <td className="border border-black p-3 align-top">
-                                                        {project?.activities.map((act, i) => (
-                                                            <div key={act.id} className="mb-6">
-                                                                <div className="font-bold mb-2">
-                                                                    {getAlphabetIndex(i)}. {act.name} ({act.jp} JP)
-                                                                </div>
-                                                                {/* Render Detailed Steps if Available */}
-                                                                {act.steps && act.steps.length > 0 ? (
-                                                                    <ol className="list-decimal pl-5 m-0 space-y-1 text-base">
-                                                                        {act.steps.map((step, idx) => (
-                                                                            <li key={idx}>{step.replace(/^\d+[\.\)]\s*/, '')}</li>
-                                                                        ))}
-                                                                    </ol>
-                                                                ) : (
-                                                                    <p className="pl-4 mt-1 text-base italic text-gray-500">{act.description}</p>
-                                                                )}
-                                                            </div>
-                                                        ))}
-                                                    </td>
-                                                </tr>
-                                            </tbody>
-                                        </table>
-
-                                        {/* Table 5: Asesmen */}
-                                        <h2 className="text-center font-bold text-xl mb-2 mt-4">Asesmen Projek</h2>
-                                        <table className="w-full border-collapse border border-black mb-6 text-sm">
-                                            <thead>
-                                                <tr className="bg-gray-200">
-                                                    <th className="border border-black p-2">Dimensi</th>
-                                                    <th className="border border-black p-2">Aspek</th>
-                                                    <th className="border border-black p-2">Sangat Baik</th>
-                                                    <th className="border border-black p-2">Baik</th>
-                                                    <th className="border border-black p-2">Cukup</th>
-                                                    <th className="border border-black p-2">Kurang</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                                {project.assessmentRubrics && project.assessmentRubrics.length > 0 ? (
-                                                    project.assessmentRubrics.map((dimGroup, i) => (
-                                                        dimGroup.rubrics.map((rubric, j) => (
-                                                            <tr key={`${i}-${j}`}>
-                                                                <td className="border border-black p-2 font-bold">{j === 0 ? dimGroup.dimensionName : ''}</td>
-                                                                <td className="border border-black p-2">{rubric.aspect}</td>
-                                                                <td className="border border-black p-2">{rubric.score4}</td>
-                                                                <td className="border border-black p-2">{rubric.score3}</td>
-                                                                <td className="border border-black p-2">{rubric.score2}</td>
-                                                                <td className="border border-black p-2">{rubric.score1}</td>
-                                                            </tr>
-                                                        ))
-                                                    ))
-                                                ) : (
-                                                    <tr><td colSpan={6} className="border border-black p-2 text-center text-gray-500">-</td></tr>
-                                                )}
-                                            </tbody>
-                                        </table>
-
-                                        {/* Signatures */}
-                                        <div className="mt-8 flex justify-between px-4 text-lg">
-                                            <div className="text-center w-1/2">
-                                                <p>Kepala Sekolah</p>
-                                                <br/><br/><br/>
-                                                <p className="font-bold underline">{project?.principalName || "Nama..."}</p>
-                                                <p>NIP. {project?.principalNip}</p>
-                                            </div>
-                                            <div className="text-center w-1/2">
-                                                <p>{project?.signaturePlace}, {formatDate(project?.signatureDate || "")}</p>
-                                                <p>Koordinator Projek</p>
-                                                <br/><br/><br/>
-                                                <p className="font-bold underline">{project?.coordinatorName || "Nama..."}</p>
-                                                <p>NIP. {project?.coordinatorNip}</p>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            )}
+                    <div className="lg:col-span-8 relative">
+                        <div className="absolute top-4 right-4 bg-white/80 backdrop-blur px-3 py-1 rounded-full text-xs font-bold text-slate-500 flex items-center gap-1 z-10 pointer-events-none">
+                            <Eye className="w-3 h-3" /> Live Preview
                         </div>
+                        <DocumentPreview project={project} />
                     </div>
                 </div>
             )}

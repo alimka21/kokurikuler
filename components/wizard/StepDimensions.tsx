@@ -26,7 +26,7 @@ const StepDimensions: React.FC<Props> = ({ recommended, selected, onSelect, isLo
                 {/* Updated Text per instruction */}
                 <h3 className="text-xl font-bold text-slate-800 mb-3">Mohon Tunggu Sebentar...</h3>
                 <p className="text-slate-500 max-w-lg text-lg leading-relaxed">
-                    Tunggu sebentar AI akan menentukan rekomendasi dimensi profil lulusan yang sesuai dengan hasil analisis konteks kamu
+                    Tunggu beberapa saat, AI akan merekomendasikan Dimensi Profil Lulusan yang sesuai dengan analisis konteks sekolah mu.
                 </p>
             </div>
         );

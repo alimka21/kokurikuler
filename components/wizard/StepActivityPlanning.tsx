@@ -2,7 +2,7 @@
 import React from 'react';
 import { Activity } from '../../types';
 import { AIButton } from '../common/UiKit';
-import { Plus, Trash2, PieChart, AlertCircle } from 'lucide-react';
+import { Plus, Trash2, PieChart, AlertCircle, Layers } from 'lucide-react';
 
 const ActivityItem: React.FC<{ 
     idx: number; activity: Activity; 
@@ -62,8 +62,9 @@ const ActivityItem: React.FC<{
 );
 
 interface Props {
-  totalJp: number; // Project JP
-  totalAnnualJp?: number; // Annual JP (Optional to avoid breaking if not passed yet)
+  totalJp: number; // Project JP (Current Project)
+  totalAnnualJp?: number; // Annual Target (e.g. 320)
+  usedByOthers?: number; // JP used by OTHER projects in same class
   setTotalJp: (v: number) => void;
   activities: Activity[]; 
   setActivities: (a: Activity[]) => void;
@@ -71,10 +72,23 @@ interface Props {
   isGenerating: boolean;
 }
 
-const StepActivityPlanning: React.FC<Props> = ({ totalJp, totalAnnualJp = 360, setTotalJp, activities, setActivities, onGenerate, isGenerating }) => {
+const StepActivityPlanning: React.FC<Props> = ({ 
+    totalJp, 
+    totalAnnualJp = 360, 
+    usedByOthers = 0,
+    setTotalJp, 
+    activities, 
+    setActivities, 
+    onGenerate, 
+    isGenerating 
+}) => {
   
-  const totalAllocated = activities.reduce((acc, curr) => acc + curr.jp, 0);
-  const remainingAnnual = Math.max(0, totalAnnualJp - totalJp);
+  // Internal consistency (Activities sum vs Project Allocation)
+  const totalActivitiesAllocated = activities.reduce((acc, curr) => acc + curr.jp, 0);
+  
+  // Annual calculation
+  const remainingAnnual = Math.max(0, totalAnnualJp - usedByOthers - totalJp);
+  const isOverLimit = (usedByOthers + totalJp) > totalAnnualJp;
 
   const add = () => setActivities([...activities, { id: Date.now().toString(), name: "Kegiatan Baru", type: "Praktik", jp: 2, description: "" }]);
   const update = (id: string, f: keyof Activity, v: any) => setActivities(activities.map(a => a.id === id ? { ...a, [f]: v } : a));
@@ -84,48 +98,80 @@ const StepActivityPlanning: React.FC<Props> = ({ totalJp, totalAnnualJp = 360, s
     <div className="flex flex-col lg:flex-row gap-8 py-4">
       <div className="w-full lg:w-1/3 space-y-6">
         <div className="sticky top-24 space-y-6">
-           {/* Project Allocation Card */}
-           <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-soft">
-              <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">Alokasi JP Projek Ini</label>
-              <div className="relative">
-                 <input type="number" value={totalJp || ''} onChange={(e) => setTotalJp(parseInt(e.target.value))} className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all font-bold text-2xl text-slate-900" placeholder="0" />
-                 <span className="absolute right-4 top-1/2 -translate-y-1/2 text-sm font-bold text-slate-400">JP</span>
-              </div>
-           </div>
-
+           
            {/* Annual Stat Card */}
            <div className="bg-slate-800 text-white p-6 rounded-2xl border border-slate-700 shadow-soft relative overflow-hidden">
                 <PieChart className="absolute right-4 top-4 text-slate-700 w-24 h-24 opacity-20" />
                 <div className="relative z-10">
-                    <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">Program Tahunan</h3>
-                    <div className="flex justify-between items-end mb-1">
+                    <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">Kuota JP Tahunan</h3>
+                    
+                    {/* Row 1: Total Annual */}
+                    <div className="flex justify-between items-center mb-2 pb-2 border-b border-slate-700/50">
                         <span className="text-sm text-slate-300">Total Tahunan</span>
                         <span className="font-bold">{totalAnnualJp} JP</span>
                     </div>
-                    <div className="flex justify-between items-end mb-4">
-                         <span className="text-sm text-slate-300">Dipakai Projek Ini</span>
+
+                    {/* Row 2: Used by OTHER projects */}
+                    <div className="flex justify-between items-center mb-2">
+                         <span className="text-sm text-amber-400 flex items-center gap-1">
+                            <Layers className="w-3 h-3" /> Projek Lain
+                         </span>
+                         <span className="font-medium text-amber-400">-{usedByOthers} JP</span>
+                    </div>
+
+                    {/* Row 3: Used by THIS project */}
+                    <div className="flex justify-between items-center mb-4">
+                         <span className="text-sm text-emerald-400 flex items-center gap-1">
+                            <PieChart className="w-3 h-3" /> Projek Ini
+                         </span>
                          <span className="font-bold text-emerald-400">-{totalJp} JP</span>
                     </div>
-                    <div className="pt-4 border-t border-slate-600">
+                    
+                    {/* Row 4: Remaining */}
+                    <div className="pt-3 border-t border-slate-600 bg-slate-800/50">
                          <div className="flex justify-between items-end">
-                            <span className="text-sm font-bold text-slate-200">Sisa JP Tersedia</span>
-                            <span className="text-2xl font-bold text-white">{remainingAnnual} JP</span>
+                            <span className="text-sm font-bold text-slate-200">Sisa Tersedia</span>
+                            <span className={`text-2xl font-bold ${isOverLimit ? 'text-red-400' : 'text-white'}`}>
+                                {remainingAnnual} JP
+                            </span>
                         </div>
+                        {isOverLimit && (
+                            <p className="text-[10px] text-red-400 mt-1 font-bold">⚠️ Melebihi kuota tahunan!</p>
+                        )}
                     </div>
                 </div>
            </div>
 
+           {/* Project Allocation Input Card */}
            <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-soft">
-              <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">Distribusi Aktivitas</h3>
+              <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">Alokasi Projek Ini</label>
+              <div className="relative">
+                 <input 
+                    type="number" 
+                    value={totalJp || ''} 
+                    onChange={(e) => setTotalJp(parseInt(e.target.value) || 0)} 
+                    className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all font-bold text-2xl text-slate-900" 
+                    placeholder="0" 
+                 />
+                 <span className="absolute right-4 top-1/2 -translate-y-1/2 text-sm font-bold text-slate-400">JP</span>
+              </div>
+              <p className="text-xs text-slate-500 mt-2 leading-relaxed">
+                  Masukkan jumlah JP untuk projek ini saja. Pastikan tidak melebihi sisa tersedia.
+              </p>
+           </div>
+
+           {/* Distribution Bar */}
+           <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-soft">
+              <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">Rincian Aktivitas</h3>
               <div className="flex items-baseline gap-2 mb-2">
-                 <span className={`text-4xl font-bold tracking-tight ${totalAllocated > totalJp ? 'text-red-500' : 'text-primary'}`}>{totalAllocated}</span>
+                 <span className={`text-4xl font-bold tracking-tight ${totalActivitiesAllocated > totalJp ? 'text-red-500' : 'text-primary'}`}>{totalActivitiesAllocated}</span>
                  <span className="text-slate-400 font-medium text-lg">/ {totalJp} JP</span>
               </div>
               <div className="w-full bg-slate-100 rounded-full h-2.5 overflow-hidden">
-                <div className={`h-full rounded-full transition-all duration-500 ${totalAllocated > totalJp ? 'bg-red-500' : 'bg-primary'}`} style={{ width: `${Math.min((totalAllocated / totalJp) * 100, 100)}%` }}></div>
+                <div className={`h-full rounded-full transition-all duration-500 ${totalActivitiesAllocated > totalJp ? 'bg-red-500' : 'bg-primary'}`} style={{ width: `${Math.min((totalActivitiesAllocated / totalJp) * 100, 100)}%` }}></div>
               </div>
               <p className="text-xs text-slate-500 mt-2">
-                  Pastikan total aktivitas sama dengan alokasi JP projek.
+                  Total JP aktivitas harus sama dengan Alokasi Projek.
               </p>
            </div>
 

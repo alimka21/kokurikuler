@@ -271,7 +271,7 @@ export const generateAndDownloadDocx = async (project: ProjectState) => {
             children: [
                 // TITLE (18pt = 36 half-points, Bold, Black)
                 new Paragraph({
-                    text: "MODUL PROJEK",
+                    text: "MODUL PROJEK", // Bisa diganti "Nama Projek" jika judul dokumen yang dimaksud
                     heading: HeadingLevel.HEADING_1,
                     alignment: AlignmentType.CENTER,
                     run: { font: "Times New Roman", bold: true, size: 36, color: "000000" }, // 18pt
@@ -282,7 +282,7 @@ export const generateAndDownloadDocx = async (project: ProjectState) => {
                     text: project.schoolName.toUpperCase(),
                     heading: HeadingLevel.HEADING_2,
                     alignment: AlignmentType.CENTER,
-                    run: { font: "Times New Roman", size: 28, color: "000000" }, // 14pt (Not bold per request)
+                    run: { font: "Times New Roman", size: 28, color: "000000" }, // 14pt (Normal weight per common standard, user requested size only)
                     spacing: { after: 400 }
                 }),
 
@@ -293,6 +293,7 @@ export const generateAndDownloadDocx = async (project: ProjectState) => {
                     rows: [
                         createHeaderRow("Identitas Projek"),
                         createRow("Tema Projek", project.selectedTheme),
+                        createRow("Bentuk Kegiatan", project.activityFormat), // ADDED NEW ROW HERE
                         createRow("Ide Projek", project.title === "MODUL PROJEK" ? "-" : project.title),
                         createRow("Kelas", project.targetClass),
                         createRow("Alokasi Waktu (JP)", `${project.projectJpAllocation} JP`),
@@ -362,7 +363,7 @@ export const generateAndDownloadDocx = async (project: ProjectState) => {
                 new Paragraph({
                     text: "Asesmen Projek",
                     alignment: AlignmentType.CENTER,
-                    run: { font: "Times New Roman", bold: true, size: 28, color: "000000" }, // 14pt
+                    run: { font: "Times New Roman", bold: true, size: 28, color: "000000" }, // 14pt Bold
                     spacing: { after: 100 }
                 }),
                 new Table({
@@ -434,9 +435,15 @@ export const generateAnnualProgramDocx = async (primaryProject: ProjectState, re
         margins: defaultCellMargin,
     });
 
-    const para = (text: string, bold = false, align: any = AlignmentType.LEFT) => new Paragraph({
-        children: [new TextRun({ text, bold, font: "Times New Roman", size: 24 })], 
-        alignment: align
+    // Paragraph helper for Signatures (Centered)
+    const createCenteredText = (text: string) => new Paragraph({
+        children: [new TextRun({ text, font: "Times New Roman", size: 24 })],
+        alignment: AlignmentType.CENTER
+    });
+
+    const createCenteredBoldText = (text: string) => new Paragraph({
+        children: [new TextRun({ text, font: "Times New Roman", size: 24, bold: true })],
+        alignment: AlignmentType.CENTER
     });
 
     const projectRows = allProjects.map((proj, index) => {
@@ -449,6 +456,7 @@ export const generateAnnualProgramDocx = async (primaryProject: ProjectState, re
                 cell(proj.targetClass || "-"),
                 cell(proj.selectedDimensions.join(", ")),
                 cell(proj.selectedTheme),
+                cell(proj.title === "MODUL PROJEK" ? "-" : proj.title), // New Column: Ide Projek
                 cell(proj.activityFormat),
                 cell(activitiesText), 
                 cell(allSubjects || proj.integratedSubjects || "-"),
@@ -471,25 +479,27 @@ export const generateAnnualProgramDocx = async (primaryProject: ProjectState, re
                 page: {
                     size: {
                         orientation: PageOrientation.LANDSCAPE,
-                        width: 16838,
-                        height: 11906,
+                        width: 16838, // A4 Landscape
+                        height: 11906, // A4 Landscape
                     },
                     margin: { top: 720, right: 720, bottom: 720, left: 720 }
                 }
             },
             children: [
+                // 1. Judul: 18pt (36), Bold, Black (Match Single Doc Style)
                 new Paragraph({
                     text: "PROGRAM TAHUNAN PROJEK KOKURIKULER",
                     heading: HeadingLevel.HEADING_1,
                     alignment: AlignmentType.CENTER,
-                    run: { font: "Times New Roman", bold: true, size: 28 },
-                    spacing: { after: 200 }
+                    run: { font: "Times New Roman", bold: true, size: 36, color: "000000" }, 
+                    spacing: { after: 100 }
                 }),
+                // 2. Subjudul: 14pt (28), Black
                 new Paragraph({
                     text: `KELAS ${primaryProject.targetClass || "..."} - ${primaryProject.schoolName.toUpperCase()}`,
                     heading: HeadingLevel.HEADING_2,
                     alignment: AlignmentType.CENTER,
-                    run: { font: "Times New Roman", bold: true, size: 24 },
+                    run: { font: "Times New Roman", size: 28, color: "000000" }, 
                     spacing: { after: 400 }
                 }),
 
@@ -504,6 +514,7 @@ export const generateAnnualProgramDocx = async (primaryProject: ProjectState, re
                                 cell("Kelas", true, AlignmentType.CENTER),
                                 cell("Dimensi Profil", true, AlignmentType.CENTER),
                                 cell("Tema", true, AlignmentType.CENTER),
+                                cell("Ide Projek", true, AlignmentType.CENTER), // New Column
                                 cell("Bentuk Kegiatan", true, AlignmentType.CENTER),
                                 cell("Poin Aktivitas", true, AlignmentType.CENTER),
                                 cell("Mata Pelajaran", true, AlignmentType.CENTER),
@@ -513,19 +524,19 @@ export const generateAnnualProgramDocx = async (primaryProject: ProjectState, re
                         ...projectRows,
                         new TableRow({
                             children: [
-                                new TableCell({ columnSpan: 7, margins: defaultCellMargin, children: [new Paragraph({ text: "Total Alokasi Waktu Terpakai", alignment: AlignmentType.RIGHT, run: { bold: true, font: "Times New Roman" } })] }),
+                                new TableCell({ columnSpan: 8, margins: defaultCellMargin, children: [new Paragraph({ text: "Total Alokasi Waktu Terpakai", alignment: AlignmentType.RIGHT, run: { bold: true, font: "Times New Roman" } })] }),
                                 cell(`${totalAllocated} JP`, true, AlignmentType.CENTER),
                             ]
                         }),
                         new TableRow({
                             children: [
-                                new TableCell({ columnSpan: 7, margins: defaultCellMargin, children: [new Paragraph({ text: "Total Beban Belajar Tahunan", alignment: AlignmentType.RIGHT, run: { bold: true, font: "Times New Roman" } })] }),
+                                new TableCell({ columnSpan: 8, margins: defaultCellMargin, children: [new Paragraph({ text: "Total Beban Belajar Tahunan", alignment: AlignmentType.RIGHT, run: { bold: true, font: "Times New Roman" } })] }),
                                 cell(`${totalAnnual} JP`, true, AlignmentType.CENTER),
                             ]
                         }),
                         new TableRow({
                             children: [
-                                new TableCell({ columnSpan: 7, margins: defaultCellMargin, children: [new Paragraph({ text: "Sisa Waktu", alignment: AlignmentType.RIGHT, run: { bold: true, font: "Times New Roman" } })] }),
+                                new TableCell({ columnSpan: 8, margins: defaultCellMargin, children: [new Paragraph({ text: "Sisa Waktu", alignment: AlignmentType.RIGHT, run: { bold: true, font: "Times New Roman" } })] }),
                                 cell(`${remaining} JP`, true, AlignmentType.CENTER),
                             ]
                         })
@@ -535,7 +546,7 @@ export const generateAnnualProgramDocx = async (primaryProject: ProjectState, re
                 new Paragraph({ text: "" }),
                 new Paragraph({ text: "" }),
 
-                // Signatures
+                // Signatures: 50% / 50%, Centered Content
                  new Table({
                     width: { size: 100, type: WidthType.PERCENTAGE },
                     borders: { top: { style: BorderStyle.NONE }, bottom: { style: BorderStyle.NONE }, left: { style: BorderStyle.NONE }, right: { style: BorderStyle.NONE }, insideHorizontal: { style: BorderStyle.NONE }, insideVertical: { style: BorderStyle.NONE } },
@@ -543,22 +554,24 @@ export const generateAnnualProgramDocx = async (primaryProject: ProjectState, re
                         new TableRow({
                             children: [
                                 new TableCell({
+                                    width: { size: 50, type: WidthType.PERCENTAGE },
                                     children: [
-                                        para("Mengetahui,"),
-                                        para("Kepala Sekolah"),
+                                        createCenteredText("Mengetahui,"),
+                                        createCenteredText("Kepala Sekolah"),
                                         new Paragraph({ text: "" }), new Paragraph({ text: "" }),
-                                        para(primaryProject.principalName || ".........................", true),
-                                        para(`NIP. ${primaryProject.principalNip || "........................."}`),
+                                        createCenteredBoldText(primaryProject.principalName || "........................."),
+                                        createCenteredText(`NIP. ${primaryProject.principalNip || "........................."}`),
                                     ],
                                     margins: defaultCellMargin
                                 }),
                                 new TableCell({
+                                    width: { size: 50, type: WidthType.PERCENTAGE },
                                     children: [
-                                        para(`${primaryProject.signaturePlace}, ${formatDateIndo(primaryProject.signatureDate)}`),
-                                        para("Koordinator Projek"),
+                                        createCenteredText(`${primaryProject.signaturePlace}, ${formatDateIndo(primaryProject.signatureDate)}`),
+                                        createCenteredText("Koordinator Projek"),
                                         new Paragraph({ text: "" }), new Paragraph({ text: "" }),
-                                        para(primaryProject.coordinatorName || ".........................", true),
-                                        para(`NIP. ${primaryProject.coordinatorNip || "........................."}`),
+                                        createCenteredBoldText(primaryProject.coordinatorName || "........................."),
+                                        createCenteredText(`NIP. ${primaryProject.coordinatorNip || "........................."}`),
                                     ],
                                     margins: defaultCellMargin
                                 })

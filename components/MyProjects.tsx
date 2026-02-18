@@ -1,145 +1,79 @@
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { 
-  Search, 
-  Filter, 
-  ChevronDown, 
-  Sparkles, 
   PlusCircle,
-  Clock,
-  ArrowRight,
   Table as TableIcon,
   X,
-  Copy,
-  Trash2
+  Trash2,
+  FolderOpen,
+  PieChart,
+  ChevronDown,
+  ChevronRight,
+  Eye,
+  ArrowRight
 } from 'lucide-react';
 import { ProjectState } from '../types';
 import Swal from 'sweetalert2';
 import { generateAnnualProgramDocx } from '../utils/docxGenerator';
-
-// Helper to determine classes based on Phase (Simplified for Duplication Modal)
-const getClassesForPhase = (phase: string) => {
-    if (phase === "Fase A") return ["Kelas 1", "Kelas 2"];
-    if (phase === "Fase B") return ["Kelas 3", "Kelas 4"];
-    if (phase === "Fase C") return ["Kelas 5", "Kelas 6"];
-    if (phase === "Fase D") return ["Kelas 7", "Kelas 8", "Kelas 9"];
-    if (phase === "Fase E") return ["Kelas 10"];
-    if (phase === "Fase F") return ["Kelas 11", "Kelas 12"];
-    return [];
-};
-
-interface ProjectCardProps {
-  project: ProjectState;
-  onLoad: () => void;
-  onDuplicate: () => void;
-  onDownloadAnnual: () => void;
-}
-
-const ProjectCard: React.FC<ProjectCardProps> = ({ project, onLoad, onDuplicate, onDownloadAnnual }) => {
-  // Simple random image based on theme string length to keep it deterministic but varied
-  const images = [
-      "https://images.unsplash.com/photo-1509062522246-3755977927d7?q=80&w=2604&auto=format&fit=crop",
-      "https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?q=80&w=2574&auto=format&fit=crop",
-      "https://images.unsplash.com/photo-1503676260728-1c00da094a0b?q=80&w=2622&auto=format&fit=crop",
-      "https://images.unsplash.com/photo-1497633762265-9d179a990aa6?q=80&w=2673&auto=format&fit=crop"
-  ];
-  const imgIdx = (project.selectedTheme?.length || 0) % images.length;
-  const image = images[imgIdx];
-
-  return (
-  <div className="group bg-white border border-slate-200 rounded-2xl overflow-hidden flex flex-col hover:shadow-xl hover:shadow-primary/5 transition-all duration-300 h-full relative">
-    {/* Duplicate Button */}
-    <button 
-        onClick={(e) => { e.stopPropagation(); onDuplicate(); }}
-        className="absolute top-3 right-3 z-20 bg-white/90 backdrop-blur text-slate-600 p-2 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity hover:bg-white hover:text-primary shadow-sm"
-        title="Duplikasi Projek ke Kelas Lain"
-    >
-        <Copy className="w-4 h-4" />
-    </button>
-
-    <div className="h-40 overflow-hidden relative">
-      <img 
-        src={image} 
-        alt={project.title} 
-        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" 
-      />
-      <div className="absolute top-3 left-3">
-        <span className="bg-primary/90 backdrop-blur-md text-white px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wide shadow-sm flex items-center gap-1">
-          <Sparkles className="w-3 h-3" /> {project.targetClass || "Draft"}
-        </span>
-      </div>
-    </div>
-    <div className="p-5 flex-1 flex flex-col">
-      <div className="flex flex-wrap gap-2 mb-3">
-          <span className="px-2.5 py-1 text-[10px] font-bold rounded-md uppercase tracking-wide bg-slate-100 text-slate-600">
-            {project.phase}
-          </span>
-          <span className="px-2.5 py-1 text-[10px] font-bold rounded-md uppercase tracking-wide bg-emerald-100 text-emerald-700">
-            {project.projectJpAllocation} JP
-          </span>
-      </div>
-      <h3 className="text-lg font-bold text-slate-900 mb-1 leading-tight group-hover:text-primary transition-colors">
-        {project.selectedTheme || "Belum Ada Tema"}
-      </h3>
-      <p className="text-slate-500 text-xs mb-4 line-clamp-2">
-         {project.projectGoals.length > 0 ? project.projectGoals[0].description : "Masih dalam tahap perancangan..."}
-      </p>
-      
-      <div className="mt-auto grid grid-cols-2 gap-2">
-        <button 
-          onClick={onLoad}
-          className="col-span-2 bg-primary/5 hover:bg-primary hover:text-white text-primary font-bold py-2.5 rounded-xl text-sm transition-all flex items-center justify-center gap-2 group-hover:shadow-lg group-hover:shadow-primary/20"
-        >
-          <ArrowRight className="w-4 h-4" />
-          <span>Buka</span>
-        </button>
-        {/* Available when completed */}
-        {!!project.assessmentPlan && (
-            <button 
-            onClick={(e) => { e.stopPropagation(); onDownloadAnnual(); }}
-            className="col-span-2 bg-slate-50 hover:bg-teal-500 hover:text-white text-slate-600 font-bold py-2 rounded-xl text-xs transition-all flex items-center justify-center gap-2 border border-transparent hover:border-teal-400"
-            title="Download Program Tahunan"
-            >
-            <TableIcon className="w-3.5 h-3.5" />
-            <span>Program Tahunan</span>
-            </button>
-        )}
-      </div>
-    </div>
-  </div>
-)};
+import DocumentPreview from './common/DocumentPreview';
 
 interface MyProjectsProps {
   onNewProject: () => void;
   savedProjects: ProjectState[];
   onLoadProject: (id: string) => void;
   onDuplicateProject: (id: string, newClass: string, phase: string) => void;
+  onDeleteProject?: (id: string) => void; // New prop
+  onCreateNextProject?: (targetClass: string) => void; // New prop
+  onChangeView?: (view: string) => void; // Pass to redirect after creating next project
 }
 
-const MyProjects: React.FC<MyProjectsProps> = ({ onNewProject, savedProjects, onLoadProject, onDuplicateProject }) => {
+const MyProjects: React.FC<MyProjectsProps> = ({ 
+    onNewProject, 
+    savedProjects, 
+    onLoadProject, 
+    onDeleteProject,
+    onCreateNextProject,
+    onChangeView
+}) => {
   
-  const [duplicateModal, setDuplicateModal] = useState<{ isOpen: boolean; projectId: string; phase: string } | null>(null);
-  
-  const handleDuplicateClick = (proj: ProjectState) => {
-      setDuplicateModal({ isOpen: true, projectId: proj.id, phase: proj.phase });
+  const [expandedClasses, setExpandedClasses] = useState<Record<string, boolean>>({});
+  const [previewProject, setPreviewProject] = useState<ProjectState | null>(null);
+
+  // Group Projects by Class
+  const groupedProjects = useMemo(() => {
+    const groups: Record<string, ProjectState[]> = {};
+    savedProjects.forEach(p => {
+        const cls = p.targetClass || "Draft (Tanpa Kelas)";
+        if (!groups[cls]) groups[cls] = [];
+        groups[cls].push(p);
+    });
+    // Sort by class name
+    return Object.keys(groups).sort().reduce((acc, key) => {
+        acc[key] = groups[key];
+        return acc;
+    }, {} as Record<string, ProjectState[]>);
+  }, [savedProjects]);
+
+  // Initial Expand for all classes
+  useMemo(() => {
+      const initial: Record<string, boolean> = {};
+      Object.keys(groupedProjects).forEach(k => initial[k] = true);
+      if (Object.keys(expandedClasses).length === 0) setExpandedClasses(initial);
+  }, [groupedProjects]);
+
+  const toggleClass = (cls: string) => {
+      setExpandedClasses(prev => ({ ...prev, [cls]: !prev[cls] }));
   };
 
-  const confirmDuplicate = (newClass: string) => {
-      if (duplicateModal) {
-          onDuplicateProject(duplicateModal.projectId, newClass, duplicateModal.phase);
-          setDuplicateModal(null);
-      }
-  };
-
-  const handleDownloadAnnual = async (proj: ProjectState) => {
+  const handleDownloadAnnual = async (className: string, projects: ProjectState[]) => {
       try {
-          // Filter related projects (Same class)
-          const classmates = savedProjects.filter(p => p.targetClass === proj.targetClass);
-          await generateAnnualProgramDocx(proj, classmates);
+          if (projects.length === 0) return;
+          // Use the first project as the "primary" context carrier
+          await generateAnnualProgramDocx(projects[0], projects);
           Swal.fire({
               icon: 'success',
               title: 'Berhasil Unduh',
-              text: 'Program Tahunan telah diunduh.',
+              text: `Program Tahunan ${className} telah diunduh.`,
               timer: 1500,
               showConfirmButton: false
           });
@@ -148,75 +82,213 @@ const MyProjects: React.FC<MyProjectsProps> = ({ onNewProject, savedProjects, on
       }
   };
 
+  const handleDelete = (id: string) => {
+      Swal.fire({
+          title: 'Hapus Projek?',
+          text: "Data yang dihapus tidak dapat dikembalikan.",
+          icon: 'warning',
+          showCancelButton: true,
+          confirmButtonColor: '#d33',
+          confirmButtonText: 'Ya, Hapus'
+      }).then((result) => {
+          if (result.isConfirmed && onDeleteProject) {
+              onDeleteProject(id);
+          }
+      });
+  };
+
+  const handleCreateNext = (cls: string) => {
+      if (onCreateNextProject && onChangeView) {
+          onCreateNextProject(cls);
+          onChangeView('wizard');
+      }
+  };
+
+  const handleOpenPreview = (proj: ProjectState) => {
+      setPreviewProject(proj);
+  };
+
+  const handleEditFromPreview = () => {
+      if (previewProject) {
+          onLoadProject(previewProject.id);
+          setPreviewProject(null);
+      }
+  };
+
   return (
     <>
-    <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700 pb-20">
+    <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700 pb-20 max-w-7xl mx-auto">
       
       {/* Header Section */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 bg-white p-6 rounded-2xl border border-slate-200 shadow-soft">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900 mb-1">Projek Saya</h1>
-          <p className="text-slate-500 text-sm">Kelola {savedProjects.length} rancangan projek tersimpan.</p>
+          <h1 className="text-2xl font-bold text-slate-900 mb-1">Daftar Projek</h1>
+          <p className="text-slate-500 text-sm">Kelola dokumen kokurikuler Anda per kelas.</p>
         </div>
         <div className="flex items-center gap-3 w-full md:w-auto">
              <button 
                 onClick={onNewProject}
-                className="bg-primary text-white px-4 py-2.5 rounded-xl text-sm font-bold shadow-lg shadow-primary/20 hover:bg-primary-hover transition-all flex items-center gap-2"
+                className="bg-slate-800 text-white px-4 py-2.5 rounded-xl text-sm font-bold hover:bg-slate-900 transition-all flex items-center gap-2"
              >
-                <PlusCircle className="w-5 h-5" /> Buat Baru
+                <PlusCircle className="w-5 h-5" /> Buat Projek Baru (Awal)
              </button>
         </div>
       </div>
 
-      {/* Grid Projects */}
-      {savedProjects.length === 0 ? (
+      {Object.keys(groupedProjects).length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20 bg-white border border-dashed border-slate-300 rounded-3xl">
               <div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center mb-4">
-                  <Sparkles className="w-8 h-8 text-slate-300" />
+                  <FolderOpen className="w-8 h-8 text-slate-300" />
               </div>
               <h3 className="text-lg font-bold text-slate-700 mb-2">Belum ada projek tersimpan</h3>
               <p className="text-slate-500 max-w-sm text-center mb-6">
                   Mulai buat projek baru atau simpan draft projek yang sedang Anda kerjakan.
               </p>
-              <button onClick={onNewProject} className="text-primary font-bold hover:underline">Mulai Buat Projek</button>
           </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-8">
-            {savedProjects.map((proj) => (
-            <ProjectCard 
-                key={proj.id}
-                project={proj}
-                onLoad={() => onLoadProject(proj.id)}
-                onDuplicate={() => handleDuplicateClick(proj)}
-                onDownloadAnnual={() => handleDownloadAnnual(proj)}
-            />
-            ))}
+        <div className="space-y-6">
+            {Object.entries(groupedProjects).map(([className, projects]) => {
+                const totalUsed = projects.reduce((acc, p) => acc + p.projectJpAllocation, 0);
+                const annualTarget = projects[0]?.totalJpAnnual || 0;
+                const isOverLimit = totalUsed > annualTarget;
+                const isOpen = expandedClasses[className];
+
+                return (
+                    <div key={className} className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm">
+                        {/* Group Header */}
+                        <div 
+                            className="p-5 bg-slate-50/50 flex flex-col lg:flex-row lg:items-center justify-between gap-4 cursor-pointer hover:bg-slate-50 transition-colors"
+                            onClick={() => toggleClass(className)}
+                        >
+                            <div className="flex items-center gap-3">
+                                <div className={`p-1 rounded-md transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`}>
+                                    <ChevronDown className="w-5 h-5 text-slate-400" />
+                                </div>
+                                <div>
+                                    <h3 className="text-lg font-bold text-slate-900">{className}</h3>
+                                    <div className="flex items-center gap-2 text-xs font-medium text-slate-500 mt-0.5">
+                                        <PieChart className="w-3.5 h-3.5" />
+                                        <span>Total JP: <strong className={isOverLimit ? "text-red-500" : "text-emerald-600"}>{totalUsed}</strong> / {annualTarget} JP</span>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div className="flex flex-wrap items-center gap-3" onClick={e => e.stopPropagation()}>
+                                <button 
+                                    onClick={() => handleCreateNext(className)}
+                                    className="px-4 py-2 bg-primary/10 text-primary hover:bg-primary hover:text-white rounded-xl text-xs font-bold transition-all flex items-center gap-2 border border-primary/20"
+                                    title="Buat projek ke-2 di kelas ini tanpa analisis ulang"
+                                >
+                                    <PlusCircle className="w-4 h-4" /> Projek Lanjutan
+                                </button>
+                                <button 
+                                    onClick={() => handleDownloadAnnual(className, projects)}
+                                    className="px-4 py-2 bg-white text-slate-600 hover:text-teal-600 hover:border-teal-200 border border-slate-200 rounded-xl text-xs font-bold transition-all flex items-center gap-2 shadow-sm"
+                                >
+                                    <TableIcon className="w-4 h-4" /> Program Tahunan
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* Projects List Table */}
+                        {isOpen && (
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-left text-sm text-slate-600">
+                                    <thead className="bg-white border-b border-slate-100 text-xs uppercase font-bold text-slate-400">
+                                        <tr>
+                                            <th className="px-6 py-4 w-12 text-center">No</th>
+                                            <th className="px-6 py-4">Tema & Ide Projek</th>
+                                            <th className="px-6 py-4">Dimensi Profil</th>
+                                            <th className="px-6 py-4 text-center">Alokasi JP</th>
+                                            <th className="px-6 py-4 text-center">Status</th>
+                                            <th className="px-6 py-4 text-right">Aksi</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-50">
+                                        {projects.map((proj, idx) => (
+                                            <tr key={proj.id} className="hover:bg-slate-50/50 transition-colors group">
+                                                <td className="px-6 py-4 text-center font-medium text-slate-400">{idx + 1}</td>
+                                                <td className="px-6 py-4">
+                                                    <div className="font-bold text-slate-800 text-base">{proj.selectedTheme || "Belum Ada Tema"}</div>
+                                                    <div className="text-xs text-slate-400 mt-1 line-clamp-1">{proj.title !== "MODUL PROJEK" ? proj.title : "Draft Projek"}</div>
+                                                </td>
+                                                <td className="px-6 py-4">
+                                                    <div className="flex flex-wrap gap-1">
+                                                        {proj.selectedDimensions.slice(0, 2).map((d, i) => (
+                                                            <span key={i} className="px-2 py-0.5 bg-slate-100 rounded text-[10px] font-medium">{d}</span>
+                                                        ))}
+                                                        {proj.selectedDimensions.length > 2 && (
+                                                            <span className="px-2 py-0.5 bg-slate-100 rounded text-[10px] font-medium">+{proj.selectedDimensions.length - 2}</span>
+                                                        )}
+                                                    </div>
+                                                </td>
+                                                <td className="px-6 py-4 text-center">
+                                                    <span className="font-bold text-slate-700 bg-slate-100 px-3 py-1 rounded-lg">{proj.projectJpAllocation} JP</span>
+                                                </td>
+                                                <td className="px-6 py-4 text-center">
+                                                    {!!proj.assessmentPlan ? (
+                                                        <span className="text-emerald-600 bg-emerald-50 px-2 py-1 rounded-md text-xs font-bold">Selesai</span>
+                                                    ) : (
+                                                        <span className="text-amber-600 bg-amber-50 px-2 py-1 rounded-md text-xs font-bold">Draft</span>
+                                                    )}
+                                                </td>
+                                                <td className="px-6 py-4 text-right">
+                                                    <div className="flex items-center justify-end gap-2 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
+                                                        <button 
+                                                            onClick={() => handleOpenPreview(proj)}
+                                                            className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 text-blue-600 hover:bg-blue-100 rounded-lg text-xs font-bold transition-colors"
+                                                        >
+                                                            <Eye className="w-3.5 h-3.5" /> Buka
+                                                        </button>
+                                                        <button 
+                                                            onClick={() => handleDelete(proj.id)}
+                                                            className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                                                            title="Hapus"
+                                                        >
+                                                            <Trash2 className="w-4 h-4" />
+                                                        </button>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        )}
+                    </div>
+                );
+            })}
         </div>
       )}
     </div>
-    
-    {/* Duplicate Modal */}
-    {duplicateModal && duplicateModal.isOpen && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-in fade-in duration-200">
-            <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl p-6 animate-in zoom-in-95">
-                <div className="flex justify-between items-center mb-4">
-                    <h3 className="text-lg font-bold text-slate-900">Duplikasi Projek</h3>
-                    <button onClick={() => setDuplicateModal(null)}><X className="w-5 h-5 text-slate-500" /></button>
+
+    {/* Preview Modal */}
+    {previewProject && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-sm animate-in fade-in duration-200">
+            <div className="bg-transparent w-full max-w-5xl h-[90vh] flex flex-col">
+                <div className="flex justify-between items-center mb-4 px-4">
+                    <h3 className="text-white font-bold text-lg">Preview Dokumen</h3>
+                    <button onClick={() => setPreviewProject(null)} className="p-2 bg-white/10 hover:bg-white/20 rounded-full text-white transition-colors">
+                        <X className="w-6 h-6" />
+                    </button>
                 </div>
-                <p className="text-sm text-slate-600 mb-4">
-                    Pilih kelas tujuan untuk menduplikasi projek ini. Hanya kelas dalam <strong>{duplicateModal.phase}</strong> yang tersedia.
-                </p>
-                <div className="space-y-2">
-                    {getClassesForPhase(duplicateModal.phase).map(cls => (
-                        <button 
-                            key={cls}
-                            onClick={() => confirmDuplicate(cls)}
-                            className="w-full text-left px-4 py-3 rounded-xl border border-slate-200 hover:border-primary hover:bg-primary/5 hover:text-primary font-medium transition-all flex justify-between items-center group"
-                        >
-                            <span>{cls}</span>
-                            <Copy className="w-4 h-4 opacity-0 group-hover:opacity-100" />
-                        </button>
-                    ))}
+                
+                <div className="flex-1 overflow-hidden rounded-3xl bg-slate-100 relative shadow-2xl">
+                     <div className="absolute inset-0 overflow-y-auto p-4 sm:p-8 flex justify-center">
+                         <DocumentPreview project={previewProject} />
+                     </div>
+                </div>
+
+                <div className="mt-4 flex justify-center gap-4">
+                    <button onClick={() => setPreviewProject(null)} className="px-6 py-3 bg-white text-slate-900 rounded-xl font-bold hover:bg-slate-200 transition-colors">
+                        Tutup
+                    </button>
+                    <button 
+                        onClick={handleEditFromPreview}
+                        className="px-8 py-3 bg-primary text-white rounded-xl font-bold hover:bg-primary-hover shadow-lg shadow-primary/30 flex items-center gap-2 transition-all"
+                    >
+                        Lanjut Edit / Revisi <ArrowRight className="w-5 h-5" />
+                    </button>
                 </div>
             </div>
         </div>

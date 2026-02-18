@@ -80,7 +80,8 @@ export const UserRepository = {
 };
 
 export const ProjectRepository = {
-    async getProjectsByUser(email: string): Promise<ProjectState[]> {
+    // UPDATED: Return type allows null for error handling
+    async getProjectsByUser(email: string): Promise<ProjectState[] | null> {
         const { data, error } = await supabase
             .from('projects')
             .select('*')
@@ -91,10 +92,10 @@ export const ProjectRepository = {
             // Handle missing table
             if (error.code === '42P01') return []; 
 
-            // Handle recursion gracefully by THROWING, so UI keeps local optimistic state
+            // FIX: Handle RLS Recursion (42P17) gracefully
             if (error.code === '42P17') {
-                 console.warn("[Repository] RLS Recursion on Projects. Fetch skipped to preserve local state.");
-                 throw error;
+                 console.warn("[Repository] RLS Recursion (42P17) detected. Returning null to preserve local state.");
+                 return null;
             }
             throw error;
         }
@@ -141,14 +142,19 @@ export const ProjectRepository = {
         const { error } = await supabase.from('projects').upsert(payload);
         
         if (error) {
-            // Fix for 42P17 (Infinite Recursion)
-            // If the DB policy is misconfigured, we suppress the error here so the UI 
-            // shows "Success". The data is already saved in LocalStorage via hooks.
             if (error.code === '42P17') {
-                console.warn("[Repository] RLS Infinite Recursion detected. Ignoring save error to allow local persist.");
+                console.warn("[Repository] RLS Infinite Recursion detected during Save. Ignoring error to allow local persist.");
                 return;
             }
             throw error;
+        }
+    },
+
+    async deleteProject(projectId: string): Promise<void> {
+        const { error } = await supabase.from('projects').delete().eq('id', projectId);
+        if (error) {
+             if (error.code === '42P17') return; // Ignore RLS loop on delete
+             throw error;
         }
     }
 };

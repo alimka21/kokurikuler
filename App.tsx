@@ -38,7 +38,7 @@ const AuthenticatedApp: React.FC = () => {
     const { user, logout, updateUser } = useAuth();
     const { 
         project, savedProjects, updateProject, currentStep, nextStep, prevStep, goToStep,
-        loadingAI, isFinalizing, saveProject, createNewProject, loadProject, duplicateProject, resetProject,
+        loadingAI, isFinalizing, saveProject, createNewProject, loadProject, duplicateProject, resetProject, deleteProject, createNextProjectForClass,
         runAnalysis, runThemeRecommend, runCreativeIdeaGen, runGoalDraft, runActivityPlan, 
         runFinalization, exportDocx, exportAnnualDocx 
     } = useProject();
@@ -222,7 +222,22 @@ const AuthenticatedApp: React.FC = () => {
             case 3: return <StepDimensions recommended={project.recommendedDimensions} selected={project.selectedDimensions} onSelect={(dims) => updateProject('selectedDimensions', dims)} isLoading={loadingAI} />;
             case 4: return <StepThemeAndFormat options={project.themeOptions} selectedTheme={project.selectedTheme} onSelectTheme={(t, r) => { updateProject('selectedTheme', t); updateProject('selectedThemeReason', r); }} activityFormat={project.activityFormat} onSelectFormat={(f) => updateProject('activityFormat', f)} creativeIdeas={project.creativeIdeas} selectedIdea={project.title} onSelectIdea={(t) => { updateProject('title', t); const selectedIdeaObj = project.creativeIdeas.find(idea => idea.title === t); if (selectedIdeaObj) { updateProject('projectDescription', selectedIdeaObj.description); } }} onGenerateIdeas={runCreativeIdeaGen} isLoading={loadingAI} onGenerateThemes={runThemeRecommend} hasDownstreamData={project.projectGoals.length > 0 || project.activities.length > 0} />;
             case 5: return <StepGoals goals={project.projectGoals} setGoals={(g) => updateProject('projectGoals', g)} onGenerate={runGoalDraft} isGenerating={loadingAI} phase={project.phase} />;
-            case 6: return <StepActivityPlanning totalJp={project.projectJpAllocation} totalAnnualJp={project.totalJpAnnual} setTotalJp={(v) => updateProject('projectJpAllocation', v)} activities={project.activities} setActivities={(a) => updateProject('activities', a)} onGenerate={runActivityPlan} isGenerating={loadingAI} />;
+            case 6: 
+                // Calculate Used JP by OTHER projects in the same class
+                const usedByOthers = savedProjects
+                    .filter(p => p.targetClass === project.targetClass && p.id !== project.id)
+                    .reduce((acc, p) => acc + (p.projectJpAllocation || 0), 0);
+                
+                return <StepActivityPlanning 
+                    totalJp={project.projectJpAllocation} 
+                    totalAnnualJp={project.totalJpAnnual} 
+                    usedByOthers={usedByOthers}
+                    setTotalJp={(v) => updateProject('projectJpAllocation', v)} 
+                    activities={project.activities} 
+                    setActivities={(a) => updateProject('activities', a)} 
+                    onGenerate={runActivityPlan} 
+                    isGenerating={loadingAI} 
+                />;
             case 7: return <StepFinalization project={project} isReady={!!project.assessmentPlan} isFinalizing={isFinalizing} themeName={project.selectedTheme} onFinalize={runFinalization} onViewEditor={() => setView('editor')} onDownload={exportDocx} onDownloadAnnual={exportAnnualDocx} onSaveProject={saveProject} onReset={handleReset} />;
             default: return null;
         }
@@ -247,7 +262,17 @@ const AuthenticatedApp: React.FC = () => {
                 <Header title={headerTitle} onToggleSidebar={() => setSidebarOpen(!isSidebarOpen)} />
                 <div className="flex-1 overflow-y-auto scroll-smooth p-6 sm:p-8">
                     {view === 'dashboard' && <Dashboard onNewProject={handleStartProject} savedProjects={savedProjects} onLoadProject={handleLoadProject} />}
-                    {view === 'projects' && <MyProjects onNewProject={handleStartProject} savedProjects={savedProjects} onLoadProject={handleLoadProject} onDuplicateProject={duplicateProject} />}
+                    {view === 'projects' && (
+                        <MyProjects 
+                            onNewProject={handleStartProject} 
+                            savedProjects={savedProjects} 
+                            onLoadProject={handleLoadProject} 
+                            onDuplicateProject={duplicateProject}
+                            onDeleteProject={deleteProject}
+                            onCreateNextProject={createNextProjectForClass}
+                            onChangeView={(v) => setView(v as ViewMode)}
+                        />
+                    )}
                     {view === 'identity' && <IdentitySettings project={project} onChange={updateProject} onSave={() => showNotify('Data Sekolah berhasil disimpan!', 'success')} />}
                     {view === 'account' && <AccountSettings user={user!} />}
                     {view === 'wizard' && (
@@ -297,41 +322,22 @@ const AuthenticatedApp: React.FC = () => {
     );
 };
 
-// --- ROOT COMPONENT: Orchestrator ---
 const App: React.FC = () => {
-    const { user, isLoading, connectionError, login } = useAuth();
+    const { user, isLoading, login } = useAuth();
 
     if (isLoading) {
         return (
-            <div className="min-h-screen flex items-center justify-center bg-slate-50">
-                <div className="animate-pulse flex flex-col items-center">
-                    <div className="w-12 h-12 bg-slate-200 rounded-full mb-4"></div>
-                    <div className="h-4 w-32 bg-slate-200 rounded"></div>
-                    <p className="text-xs text-slate-400 mt-2">Memuat Sesi...</p>
-                </div>
-            </div>
-        );
-    }
-
-    if (connectionError && !user) {
-        return (
-             <div className="min-h-screen flex items-center justify-center bg-slate-50 p-6">
-                <div className="max-w-md w-full bg-white p-8 rounded-3xl border border-red-100 shadow-xl text-center">
-                    <div className="w-16 h-16 bg-red-100 text-red-500 rounded-full flex items-center justify-center mx-auto mb-4 animate-bounce">
-                        <AlertTriangle className="w-8 h-8" />
-                    </div>
-                    <h2 className="text-xl font-bold text-slate-900 mb-2">Koneksi Database Gagal</h2>
-                    <p className="text-slate-500 mb-6 text-sm leading-relaxed">{connectionError}</p>
-                    <button onClick={() => window.location.reload()} className="bg-primary text-white px-6 py-2.5 rounded-xl font-bold hover:bg-primary-hover transition-all shadow-lg shadow-primary/20">
-                        Muat Ulang
-                    </button>
+            <div className="flex h-screen w-full items-center justify-center bg-slate-50">
+                <div className="flex flex-col items-center gap-4">
+                    <div className="h-12 w-12 animate-spin rounded-full border-4 border-primary border-t-transparent"></div>
+                    <p className="animate-pulse font-medium text-slate-500">Memuat Sesi...</p>
                 </div>
             </div>
         );
     }
 
     if (!user) {
-        return <Login onLogin={login} />;
+        return <Login onLogin={(u) => login(u)} />;
     }
 
     return (

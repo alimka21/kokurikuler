@@ -37,6 +37,9 @@ const StepGoals: React.FC<Props> = ({ goals, setGoals, onGenerate, isGenerating,
   // Helper to handle subject tags
   const addSubject = (id: string, currentSubjects: string[], newSubject: string) => {
      if (!newSubject.trim()) return;
+     // STRICT RULE: Only 1 subject per goal
+     if (currentSubjects.length >= 1) return;
+     
      if (!currentSubjects.includes(newSubject.trim())) {
          updateGoal(id, 'subjects', [...currentSubjects, newSubject.trim()]);
      }
@@ -53,7 +56,7 @@ const StepGoals: React.FC<Props> = ({ goals, setGoals, onGenerate, isGenerating,
     <div className="max-w-4xl mx-auto py-4">
       <SectionHeader 
         title="Tujuan Projek & Integrasi Mapel" 
-        subtitle="Rumuskan tujuan spesifik dan tentukan mata pelajaran yang terintegrasi (Minimal 2 Mapel)." 
+        subtitle="Rumuskan tujuan spesifik dan tentukan mata pelajaran yang terintegrasi." 
       />
 
       <div className="flex justify-end mb-6">
@@ -97,8 +100,8 @@ const StepGoals: React.FC<Props> = ({ goals, setGoals, onGenerate, isGenerating,
                                      <label className="text-xs font-bold text-slate-400 uppercase tracking-widest flex items-center gap-1">
                                         <Tag className="w-3 h-3" /> Integrasi Mata Pelajaran ({phase})
                                      </label>
-                                     {goal.subjects.length < 2 && (
-                                         <span className="text-[10px] text-red-500 font-bold bg-red-50 px-2 py-0.5 rounded-full">Min. 2 Mapel</span>
+                                     {goal.subjects.length < 1 && (
+                                         <span className="text-[10px] text-red-500 font-bold bg-red-50 px-2 py-0.5 rounded-full">Wajib Pilih 1 Mapel</span>
                                      )}
                                 </div>
                                 
@@ -111,31 +114,33 @@ const StepGoals: React.FC<Props> = ({ goals, setGoals, onGenerate, isGenerating,
                                     ))}
                                     
                                     {/* Datalist Input for filtered subjects */}
-                                    <div className="relative flex-1 min-w-[200px]">
-                                        <input 
-                                            list={`subjects-${goal.id}`}
-                                            className="w-full bg-transparent border-none text-sm placeholder:text-slate-400 focus:ring-0 p-1"
-                                            placeholder="+ Pilih Mapel (Ketik untuk cari...)"
-                                            onKeyDown={(e) => {
-                                                if (e.key === 'Enter') {
-                                                    e.preventDefault();
-                                                    addSubject(goal.id, goal.subjects, e.currentTarget.value);
-                                                    e.currentTarget.value = '';
-                                                }
-                                            }}
-                                            onBlur={(e) => {
-                                                if(e.target.value) {
-                                                    addSubject(goal.id, goal.subjects, e.target.value);
-                                                    e.target.value = '';
-                                                }
-                                            }}
-                                        />
-                                        <datalist id={`subjects-${goal.id}`}>
-                                            {availableSubjects.map((subject) => (
-                                                <option key={subject} value={subject} />
-                                            ))}
-                                        </datalist>
-                                    </div>
+                                    {goal.subjects.length < 1 && (
+                                        <div className="relative flex-1 min-w-[200px]">
+                                            <input 
+                                                list={`subjects-${goal.id}`}
+                                                className="w-full bg-transparent border-none text-sm placeholder:text-slate-400 focus:ring-0 p-1"
+                                                placeholder="+ Pilih Mapel (Ketik untuk cari...)"
+                                                onKeyDown={(e) => {
+                                                    if (e.key === 'Enter') {
+                                                        e.preventDefault();
+                                                        addSubject(goal.id, goal.subjects, e.currentTarget.value);
+                                                        e.currentTarget.value = '';
+                                                    }
+                                                }}
+                                                onBlur={(e) => {
+                                                    if(e.target.value) {
+                                                        addSubject(goal.id, goal.subjects, e.target.value);
+                                                        e.target.value = '';
+                                                    }
+                                                }}
+                                            />
+                                            <datalist id={`subjects-${goal.id}`}>
+                                                {availableSubjects.map((subject) => (
+                                                    <option key={subject} value={subject} />
+                                                ))}
+                                            </datalist>
+                                        </div>
+                                    )}
                                 </div>
                             </div>
                         </div>

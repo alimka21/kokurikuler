@@ -252,20 +252,42 @@ export const recommendThemes = async (analysis: string, dimensions: Dimension[])
 
 export const generateCreativeIdeas = async (theme: string, format: string, analysis: string): Promise<CreativeIdeaOption[]> => {
     const safeAnalysis = analysis ? analysis.substring(0, 1500) : "Sekolah Menengah";
+    
+    let specificContext = "";
+    if (format.toLowerCase().includes("7 kaih") || format.toLowerCase().includes("kebiasaan")) {
+        specificContext = `
+        MODUS SPESIFIK: GERAKAN 7 KAIH (7 Kebiasaan Anak Indonesia Hebat).
+        Daftar 7 Kebiasaan (Pilih 1 atau MAKSIMAL 2 untuk ide projek ini):
+        1. Bangun pagi
+        2. Beribadah
+        3. Berolahraga
+        4. Makan sehat dan bergizi
+        5. Gemar belajar
+        6. Bermasyarakat
+        7. Tidur cepat / tepat waktu
+
+        Tugas: 
+        1. Buat judul projek yang mencerminkan pembiasaan kebiasaan yang dipilih (Misal: "Generasi Bugar" untuk kebiasaan Olahraga & Makan Sehat).
+        2. Deskripsi harus menyebutkan eksplisit kebiasaan mana dari 7 KAIH yang diambil.
+        `;
+    }
+
     const prompt = `
     Role: Creative Director & Educational Consultant.
     Tema: "${theme}", Bentuk: "${format}", Insight: "${safeAnalysis}".
+    
+    ${specificContext}
     
     Tugas: Rumuskan 3 Ide Judul Projek Kokurikuler yang KONTEKSTUAL, RELEVAN, dan JELAS.
     
     Prinsip Utama:
     1. Judul harus menggambarkan aktivitas yang cocok dengan konteks siswa/sekolah.
-    2. Singkatan/Akronim BOLEH digunakan jika bermakna, TAPI TIDAK WAJIB. Jangan memaksakan singkatan jika terdengar aneh.
-    3. Fokus pada kualitas ide dan relevansi, bukan sekadar permainan kata.
+    2. Singkatan/Akronim BOLEH digunakan jika bermakna.
+    3. Fokus pada kualitas ide dan relevansi.
     
     Aturan Deskripsi ("description"):
     Deskripsi harus berupa 1 paragraf naratif yang mencakup alur:
-    Masalah/Latar Belakang -> Aktivitas Murid -> Pembelajaran/Kompetensi -> Output (Produk/Karakter).
+    Masalah/Latar Belakang -> Aktivitas Murid (Fokus Pembiasaan jika 7 KAIH) -> Output (Produk/Karakter).
 
     Output JSON: [{ "title": "Judul Projek", "description": "Narasi sesuai aturan alur di atas..." }]
     `;
@@ -292,20 +314,34 @@ export const draftProjectGoals = async (theme: string, dimensions: Dimension[], 
     if (format.toLowerCase().includes("kolabora")) {
         // CASE A: KOLABORATIF
         specificInstruction = `
-        MODUS: KOLABORATIF MATA PELAJARAN
-        Aturan Penulisan "description":
-        1. Tujuan harus akademis dan spesifik mengacu pada kompetensi mapel.
-        2. WAJIB menuliskan nama mata pelajaran di AKHIR kalimat deskripsi dalam tanda kurung.
-        3. Contoh: "Menganalisis interaksi antar komponen ekosistem (mata pelajaran IPA)" atau "Mempresentasikan gagasan sebagai solusi pemecahan masalah (mata pelajaran Bahasa Indonesia)".
+        MODUS: KOLABORATIF MATA PELAJARAN (STRICT)
+        Aturan Penulisan "description" & "subjects":
+        1. Tujuan harus SANGAT SPESIFIK mengacu pada 1 (SATU) mata pelajaran saja.
+        2. TIDAK BOLEH menggabungkan 2 mapel dalam 1 tujuan. Buat tujuan terpisah untuk mapel lain.
+        3. Array "subjects" WAJIB berisi TEPAT 1 (SATU) nama mata pelajaran yang sesuai.
+        4. Di akhir deskripsi tujuan, tuliskan nama mapel dalam kurung. Contoh: "... (mata pelajaran IPA)".
+        `;
+    } else if (format.toLowerCase().includes("7 kaih") || format.toLowerCase().includes("kebiasaan")) {
+        // CASE B: 7 KAIH (NEW LOGIC)
+        specificInstruction = `
+        MODUS: GERAKAN 7 KAIH (PEMBIASAAN)
+        Daftar Referensi Kebiasaan: [Bangun pagi, Beribadah, Berolahraga, Makan sehat dan bergizi, Gemar belajar, Bermasyarakat, Tidur cepat].
+        
+        Aturan Penulisan Tujuan:
+        1. Tujuan harus fokus pada "PEMBIASAAN" (Habituation), bukan sekadar pengetahuan.
+        2. Pilih 1 atau 2 kebiasaan dari daftar di atas yang relevan dengan Tema "${theme}".
+        3. Rumusan tujuan mencakup: Membangun kesepakatan, Melaksanakan pembiasaan (di sekolah & rumah), dan Refleksi diri.
+        4. "subjects" diisi dengan mata pelajaran yang relevan dengan kebiasaan tersebut (Misal: PJOK untuk Olahraga/Tidur Cepat, Agama untuk Beribadah, PKN/IPS untuk Bermasyarakat).
+        5. Contoh deskripsi: "Membiasakan pola hidup sehat melalui rutinitas bangun pagi dan berolahraga secara konsisten."
         `;
     } else {
-        // CASE B: 7KAIH / KARAKTER / LAINNYA
+        // CASE C: LAINNYA
         specificInstruction = `
-        MODUS: GERAKAN PEMBIASAAN / KARAKTER (Misal: 7KAIH)
+        MODUS: PROJEK UMUM / KEWIRAUSAHAAN
         Aturan Penulisan "description":
         1. Tujuan harus berupa pembiasaan, rutinitas, atau pemahaman manfaat.
-        2. JANGAN menuliskan nama mata pelajaran di dalam teks deskripsi. Teks harus bersih. Contoh: "Memahami manfaat berolahraga bagi tubuh." atau "Pembiasaan kegiatan berolahraga".
-        3. PENTING: Meskipun tidak ditulis di deskripsi, kamu TETAP WAJIB mengisi array "subjects" dengan mapel yang berelasi (Misal: PJOK untuk olahraga, Agama untuk ibadah).
+        2. JANGAN menuliskan nama mata pelajaran di dalam teks deskripsi. Teks harus bersih.
+        3. Array "subjects" berisi mapel yang relevan.
         `;
     }
 
@@ -313,14 +349,14 @@ export const draftProjectGoals = async (theme: string, dimensions: Dimension[], 
     Tema: "${theme}". Dimensi: ${dimensions.join(', ')}. Format: "${format}".
     Fase/Jenjang: "${phase}".
     
-    DAFTAR MATA PELAJARAN YANG TERSEDIA DI FASE INI (PILIH DARI SINI SAJA):
+    DAFTAR MATA PELAJARAN YANG TERSEDIA DI FASE INI (PILIH DARI SINI SAJA UNTUK ARRAY SUBJECTS):
     ${allowedSubjects.join(', ')}
 
     ${specificInstruction}
 
     Tugas: Rumuskan 3-4 Tujuan Projek.
     
-    Output JSON: [{ "id": "1", "description": "Isi sesuai aturan modus di atas...", "subjects": ["Mapel A", "Mapel B"] }]
+    Output JSON: [{ "id": "1", "description": "Isi sesuai aturan modus di atas...", "subjects": ["Nama Mapel"] }]
     `;
 
     const result = await generateWithRetry<ProjectGoal[]>(
@@ -330,6 +366,12 @@ export const draftProjectGoals = async (theme: string, dimensions: Dimension[], 
             if (!Array.isArray(data)) return { isValid: false, error: "Output bukan Array" };
             if (data.length === 0) return { isValid: false, error: "Data kosong" };
             
+            // Validasi tambahan untuk Kolaborasi: Pastikan subjects.length === 1
+            if (format.toLowerCase().includes("kolabora")) {
+                const invalid = data.find((g: any) => !g.subjects || g.subjects.length !== 1);
+                if (invalid) return { isValid: false, error: "Mode Kolaborasi: Setiap tujuan wajib memiliki tepat 1 mata pelajaran di array subjects." };
+            }
+
             return { isValid: true };
         },
         { responseMimeType: "application/json" }
@@ -341,6 +383,21 @@ export const draftProjectGoals = async (theme: string, dimensions: Dimension[], 
 export const generateActivityPlan = async (totalJp: number, theme: string, goals: ProjectGoal[], format: string): Promise<Activity[]> => {
     const goalsText = goals.map(g => `- ${g.description}`).join('\n');
     
+    let specificGuide = "";
+    if (format.toLowerCase().includes("7 kaih") || format.toLowerCase().includes("kebiasaan")) {
+        specificGuide = `
+        STRUKTUR KHUSUS GERAKAN 7 KAIH (WAJIB DIIKUTI):
+        Buat alur aktivitas dengan tahapan berikut (sesuaikan jumlah JP agar total pas ${totalJp} JP):
+        1. MEMBANGUN KESEPAKATAN (Introduction): Guru & siswa menyepakati kebiasaan (misal: kontrak belajar, jadwal tidur/bangun, atau jadwal olahraga).
+        2. EKSPLORASI STRATEGI: Siswa mencari cara/strategi untuk menjalankan kebiasaan tersebut.
+        3. PELAKSANAAN & JURNAL (Execution): Siswa mempraktikkan kebiasaan (di sekolah/rumah) dan mengisi Jurnal Harian. (Ini adalah inti, alokasikan JP terbanyak di sini atau buat beberapa pertemuan).
+        4. REFLEKSI & EVALUASI: Membahas tantangan dalam pelaksanaan dan mencari solusi.
+        5. PRESENTASI/SHARING: Membagikan pengalaman perubahan yang dirasakan (tubuh lebih bugar, pikiran segar, dll).
+        `;
+    } else {
+        specificGuide = "Buat alur aktivitas yang logis: Pengenalan -> Kontekstualisasi -> Aksi -> Refleksi -> Tindak Lanjut.";
+    }
+
     const prompt = `
     Peran: Ahli Kurikulum.
     Tugas: Susun "Alur Aktivitas Kokurikuler".
@@ -352,7 +409,9 @@ export const generateActivityPlan = async (totalJp: number, theme: string, goals
     Konteks: Tema "${theme}", Format "${format}".
     Tujuan: ${goalsText}
     
-    Output JSON Array: [{ "id": "1", "name": "...", "type": "Tipe", "jp": 0, "description": "..." }]
+    ${specificGuide}
+    
+    Output JSON Array: [{ "id": "1", "name": "Nama Aktivitas (Singkat & Jelas)", "type": "Tipe (misal: Diskusi/Praktik)", "jp": 0, "description": "Penjelasan singkat tentang apa yang dilakukan..." }]
     `;
 
     const result = await generateWithRetry<Activity[]>(
@@ -386,37 +445,33 @@ export const generateActivityPlan = async (totalJp: number, theme: string, goals
 export const generateHiddenSections = async (project: ProjectState): Promise<Partial<ProjectState>> => {
     // Pass the existing structure to be filled out
     const activityContext = project.activities.map(a => `- ${a.name} (${a.jp} JP): ${a.description}`).join('\n');
+    const is7Kaih = project.activityFormat.toLowerCase().includes("7 kaih");
 
     const prompt = `
     Data Projek: ${project.title}
     Tema: ${project.selectedTheme}
     Dimensi: ${project.selectedDimensions.join(', ')}
+    Format: ${project.activityFormat}
     Konsep Dasar (Deskripsi): ${project.projectDescription || "-"}
     
     Daftar Aktivitas Awal:
     ${activityContext}
 
-    Tugas 1: Lengkapi dokumen kokurikuler dengan narasi akademik untuk: Pedagogi, Lingkungan, Kemitraan, dan Digital.
-    Tugas 2: UNTUK SETIAP AKTIVITAS di atas, buatkan MICRO STEPS (Langkah-langkah mikro/detail) yang sangat operasional (5-10 poin per aktivitas). Langkah harus detil (Misal: Guru membuka..., Siswa melakukan..., Guru menutup...).
-    Tugas 3: Buatkan rubrik penilaian detil.
+    Tugas 1: Lengkapi dokumen kokurikuler dengan narasi akademik.
+    Tugas 2: UNTUK SETIAP AKTIVITAS di atas, buatkan MICRO STEPS (Langkah-langkah mikro/detail) yang sangat operasional (5-10 poin per aktivitas).
     
+    ${is7Kaih ? `
+    KHUSUS 7 KAIH:
+    - Micro Steps untuk aktivitas "Pelaksanaan/Jurnal" harus mencakup: kerjasama dengan orang tua, pengisian checklist harian, dan monitoring guru.
+    - Assessment Rubric harus menilai "Konsistensi Pembiasaan" (misal: Frekuensi bangun pagi/olahraga).
+    ` : ''}
+
     PERMINTAAN FORMAT ISI (WAJIB DIIKUTI):
-    1. "pedagogicalStrategy" (Praktik Pedagogis): Gunakan format list (dipisahkan baris baru \\n) yang berisi:
-       - Pendekatan pembelajaran
-       - Model pembelajaran (PBL/Inquiry/dll)
-       - Strategi sesuai karakteristik siswa
-    2. "learningEnvironment" (Lingkungan Belajar): Gunakan format list (\\n) berisi:
-       - Pengaturan kelas/kelompok
-       - Kondisi belajar yang dibangun
-       - PENTING: Harus sinkron dengan 'activityLocations'. Jika lokasi di luar kelas, lingkungan belajar harus mendeskripsikan kondisi luar tersebut.
-    3. "activityLocations" (Lokasi Kegiatan): List JSON String Array. Contoh: ["Kelas", "Halaman Sekolah", "Taman Kota"].
-    4. "partnerships" (Kemitraan): Gunakan format list (\\n) berisi:
-       - Mitra eksternal/Narasumber
-       - Pelibatan Orang Tua
-       - Peran Masyarakat
-    5. "digitalTools" (Digital): Gunakan format list (\\n) berisi:
-       - Platform/Aplikasi
-       - Media Digital (Video/Presentasi)
+    1. "pedagogicalStrategy": Gunakan format list (\\n) (Pendekatan, Model, Strategi).
+    2. "learningEnvironment": Gunakan format list (\\n) (Setting kelas, Kondisi belajar).
+    3. "activityLocations": List JSON String Array. Contoh: ["Kelas", "Halaman Sekolah", "Rumah (Monitoring Orang Tua)"].
+    4. "partnerships": Gunakan format list (\\n) (Mitra, Orang Tua, Peran Masyarakat).
+    5. "digitalTools": Gunakan format list (\\n) (Platform, Media).
     
     Output WAJIB JSON Object:
     {
@@ -472,10 +527,9 @@ export const generateHiddenSections = async (project: ProjectState): Promise<Par
         3
     );
     
-    // Merge generated steps into original activities to preserve non-generated fields (like original type/jp if needed)
+    // Merge generated steps into original activities
     if (result && result.activities) {
         const mergedActivities = project.activities.map((original, index) => {
-            // Try to find by ID, fallback to index
             const generated = result.activities?.find((a: any) => a.id === original.id) || result.activities?.[index];
             return {
                 ...original,
