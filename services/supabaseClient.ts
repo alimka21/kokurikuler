@@ -61,3 +61,18 @@ export const supabase = createClient(supabaseUrl, supabaseKey, {
         detectSessionInUrl: true
     }
 });
+
+// 5. Auth State Listener & Token Management (Sesuai Referensi)
+supabase.auth.onAuthStateChange((event, session) => {
+  if (session?.access_token) {
+    // Note: Di Supabase v2, setAuth() sudah deprecated dan ditangani otomatis oleh library.
+    // Listener ini berguna untuk memastikan session/token aktif dan sinkron.
+    // console.log("[Auth] Token refreshed:", event);
+  }
+});
+
+// Helper: Ambil Token JWT secara manual (untuk kebutuhan debugging RLS di SQL Editor)
+export const getAccessToken = async () => {
+    const { data } = await supabase.auth.getSession();
+    return data.session?.access_token || null;
+};

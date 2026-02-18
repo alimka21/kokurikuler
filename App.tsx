@@ -5,6 +5,7 @@ import { ProjectProvider, useProject } from './contexts/ProjectContext';
 import { STEPS } from './constants';
 import { NotificationToast, NotificationType } from './components/common/UiKit';
 import Swal from 'sweetalert2';
+import { getAccessToken } from './services/supabaseClient';
 
 // View Components
 import Dashboard from './components/Dashboard';
@@ -64,6 +65,17 @@ const AuthenticatedApp: React.FC = () => {
             window.removeEventListener('offline', handleOffline);
         };
     }, []);
+
+    // DEBUG: Log JWT Token for RLS Testing
+    useEffect(() => {
+        if (user) {
+            getAccessToken().then(token => {
+                if (token) {
+                    console.log("%c🔑 JWT Token (Copy untuk SQL Editor):", "color: #558B6E; font-weight: bold; font-size: 12px;", token);
+                }
+            });
+        }
+    }, [user]);
 
     // --- ROUTING ENGINE ---
     useEffect(() => {

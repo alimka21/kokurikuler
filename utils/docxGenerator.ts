@@ -270,19 +270,31 @@ export const generateAndDownloadDocx = async (project: ProjectState) => {
             },
             children: [
                 // TITLE (18pt = 36 half-points, Bold, Black)
+                // REMOVED 'heading' property to force manual styling. Strict TextRun.
                 new Paragraph({
-                    text: "MODUL PROJEK", // Bisa diganti "Nama Projek" jika judul dokumen yang dimaksud
-                    heading: HeadingLevel.HEADING_1,
+                    children: [
+                        new TextRun({ 
+                            text: "MODUL PROJEK", 
+                            bold: true, 
+                            size: 36, // 18pt 
+                            color: "000000",
+                            font: "Times New Roman"
+                        })
+                    ],
                     alignment: AlignmentType.CENTER,
-                    run: { font: "Times New Roman", bold: true, size: 36, color: "000000" }, // 18pt
                     spacing: { after: 100 }
                 }),
                 // SCHOOL NAME (14pt = 28 half-points, Black)
                 new Paragraph({
-                    text: project.schoolName.toUpperCase(),
-                    heading: HeadingLevel.HEADING_2,
+                    children: [
+                        new TextRun({ 
+                            text: project.schoolName.toUpperCase(), 
+                            size: 28, // 14pt 
+                            color: "000000",
+                            font: "Times New Roman"
+                        })
+                    ],
                     alignment: AlignmentType.CENTER,
-                    run: { font: "Times New Roman", size: 28, color: "000000" }, // 14pt (Normal weight per common standard, user requested size only)
                     spacing: { after: 400 }
                 }),
 
@@ -361,9 +373,8 @@ export const generateAndDownloadDocx = async (project: ProjectState) => {
 
                 // TABLE 5: ASESMEN PROJEK (14pt Bold Header, Black)
                 new Paragraph({
-                    text: "Asesmen Projek",
+                    children: [new TextRun({ text: "Asesmen Projek", bold: true, size: 28, color: "000000", font: "Times New Roman" })],
                     alignment: AlignmentType.CENTER,
-                    run: { font: "Times New Roman", bold: true, size: 28, color: "000000" }, // 14pt Bold
                     spacing: { after: 100 }
                 }),
                 new Table({
@@ -488,18 +499,29 @@ export const generateAnnualProgramDocx = async (primaryProject: ProjectState, re
             children: [
                 // 1. Judul: 18pt (36), Bold, Black (Match Single Doc Style)
                 new Paragraph({
-                    text: "PROGRAM TAHUNAN PROJEK KOKURIKULER",
-                    heading: HeadingLevel.HEADING_1,
+                    children: [
+                        new TextRun({ 
+                            text: "PROGRAM TAHUNAN PROJEK KOKURIKULER", 
+                            bold: true, 
+                            size: 36, // 18pt
+                            color: "000000",
+                            font: "Times New Roman"
+                        })
+                    ],
                     alignment: AlignmentType.CENTER,
-                    run: { font: "Times New Roman", bold: true, size: 36, color: "000000" }, 
                     spacing: { after: 100 }
                 }),
                 // 2. Subjudul: 14pt (28), Black
                 new Paragraph({
-                    text: `KELAS ${primaryProject.targetClass || "..."} - ${primaryProject.schoolName.toUpperCase()}`,
-                    heading: HeadingLevel.HEADING_2,
+                    children: [
+                        new TextRun({ 
+                            text: `KELAS ${primaryProject.targetClass || "..."} - ${primaryProject.schoolName.toUpperCase()}`,
+                            size: 28, // 14pt
+                            color: "000000",
+                            font: "Times New Roman"
+                        })
+                    ],
                     alignment: AlignmentType.CENTER,
-                    run: { font: "Times New Roman", size: 28, color: "000000" }, 
                     spacing: { after: 400 }
                 }),
 

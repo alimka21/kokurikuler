@@ -17,16 +17,19 @@ const DocumentPreview: React.FC<Props> = ({ project }) => {
     const uniqueSubjects = Array.from(new Set(project.projectGoals.flatMap(g => g.subjects)));
 
     return (
-        <div className="bg-slate-500/10 rounded-3xl p-6 sm:p-10 border border-slate-200/50 flex justify-center overflow-auto min-h-[600px] relative inner-shadow max-h-[80vh]">
+        <div className="bg-slate-500/10 rounded-3xl p-6 sm:p-10 border border-slate-200/50 flex flex-col items-center overflow-y-auto min-h-[600px] relative inner-shadow max-h-[80vh]">
              <div 
-                className="bg-white text-black p-16 flex flex-col shadow-2xl origin-top"
+                className="bg-white text-black p-16 flex flex-col shadow-2xl origin-top flex-shrink-0"
                 style={{ 
                     width: '595px', // Standard A4 width in px for web
-                    minHeight: '842px', 
+                    minHeight: '842px', // Minimum A4 height
+                    height: 'auto', // UPDATED: Allow growth
                     fontFamily: '"Times New Roman", Times, serif',
                     lineHeight: '1.5',
                     transform: 'scale(0.85)',
-                    marginTop: '-40px'
+                    transformOrigin: 'top center', // Ensure scaling starts from top
+                    marginTop: '-20px',
+                    marginBottom: '20px' 
                 }}
             >
                 {/* 18pt = 24px (approx) in web scale for 1.5 zoom */}

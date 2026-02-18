@@ -233,7 +233,7 @@ const MyProjects: React.FC<MyProjectsProps> = ({
                                                     )}
                                                 </td>
                                                 <td className="px-6 py-4 text-right">
-                                                    <div className="flex items-center justify-end gap-2 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
+                                                    <div className="flex items-center justify-end gap-2">
                                                         <button 
                                                             onClick={() => handleOpenPreview(proj)}
                                                             className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 text-blue-600 hover:bg-blue-100 rounded-lg text-xs font-bold transition-colors"
@@ -283,12 +283,14 @@ const MyProjects: React.FC<MyProjectsProps> = ({
                     <button onClick={() => setPreviewProject(null)} className="px-6 py-3 bg-white text-slate-900 rounded-xl font-bold hover:bg-slate-200 transition-colors">
                         Tutup
                     </button>
-                    <button 
-                        onClick={handleEditFromPreview}
-                        className="px-8 py-3 bg-primary text-white rounded-xl font-bold hover:bg-primary-hover shadow-lg shadow-primary/30 flex items-center gap-2 transition-all"
-                    >
-                        Lanjut Edit / Revisi <ArrowRight className="w-5 h-5" />
-                    </button>
+                    {!previewProject.assessmentPlan && (
+                        <button 
+                            onClick={handleEditFromPreview}
+                            className="px-8 py-3 bg-primary text-white rounded-xl font-bold hover:bg-primary-hover shadow-lg shadow-primary/30 flex items-center gap-2 transition-all"
+                        >
+                            Lanjut Edit / Revisi <ArrowRight className="w-5 h-5" />
+                        </button>
+                    )}
                 </div>
             </div>
         </div>
