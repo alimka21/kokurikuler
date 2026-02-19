@@ -1,8 +1,8 @@
-import React, { Component, ReactNode } from "react";
+import React, { Component, ReactNode, ErrorInfo } from "react";
 import { AlertTriangle } from "lucide-react";
 
 interface Props {
-  children: ReactNode;
+  children?: ReactNode;
 }
 
 interface State {
@@ -11,19 +11,16 @@ interface State {
 }
 
 export class ErrorBoundary extends Component<Props, State> {
-  constructor(props: Props) {
-    super(props);
-    this.state = {
-      hasError: false,
-      error: null
-    };
-  }
+  public state: State = {
+    hasError: false,
+    error: null
+  };
 
   static getDerivedStateFromError(error: any): State {
     return { hasError: true, error };
   }
 
-  componentDidCatch(error: any, errorInfo: any) {
+  componentDidCatch(error: any, errorInfo: ErrorInfo) {
     console.error("Uncaught Error caught by Boundary:", error, errorInfo);
   }
 

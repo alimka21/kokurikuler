@@ -18,7 +18,7 @@ export const useProjectWizard = (user: any) => {
         return {
             ...INITIAL_PROJECT_STATE,
             id: crypto.randomUUID(), 
-            schoolName: user?.school || '',
+            schoolName: '', // Changed to empty string (was user?.school)
             coordinatorName: user?.name || ''
         };
     });
@@ -106,7 +106,12 @@ export const useProjectWizard = (user: any) => {
     };
 
     const saveProject = async () => {
-        const updatedProject = { ...project, lastUpdated: Date.now() };
+        // Include currentStep as lastStep in the persisted object
+        const updatedProject = { 
+            ...project, 
+            lastUpdated: Date.now(),
+            lastStep: currentStep // Persist current step
+        };
         
         setSavedProjects(prev => {
             const others = prev.filter(p => p.id !== project.id);
@@ -138,7 +143,7 @@ export const useProjectWizard = (user: any) => {
         const newP = {
             ...INITIAL_PROJECT_STATE,
             id: crypto.randomUUID(),
-            schoolName: user?.school || project.schoolName,
+            schoolName: project.schoolName,
             coordinatorName: user?.name || project.coordinatorName,
             coordinatorNip: project.coordinatorNip,
             principalName: project.principalName,
@@ -190,6 +195,7 @@ export const useProjectWizard = (user: any) => {
             projectGoals: [],
             activities: [],
             projectJpAllocation: 0,
+            lastStep: 3 // Set logical starting point
         };
 
         setProject(newP);
@@ -223,13 +229,11 @@ export const useProjectWizard = (user: any) => {
         const found = savedProjects.find(p => p.id === id);
         if (found) {
             setProject(found);
-            // If project is complete, go to final step, otherwise Step 0 or where they left off?
-            // User requested "Open" shows preview. "Edit" loads here.
-            // Let's default to Step 0 (Identity) so they can review, or Step 6 (Final) if complete?
-            // Safer to start at 0 for review.
-            setCurrentStep(0); 
+            // Resume from last step or default to 0
+            const stepToLoad = found.lastStep !== undefined ? found.lastStep : 0;
+            setCurrentStep(stepToLoad); 
             saveDraft('current_project', found);
-            saveDraft('current_step', 0);
+            saveDraft('current_step', stepToLoad);
         }
     };
 

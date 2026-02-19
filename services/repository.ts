@@ -1,28 +1,38 @@
 
 import { supabase } from './supabaseClient';
-import { DbUser, DbProject, DbSystemSettings } from '../db/schema';
+import { DbUser, DbProject } from '../db/schema';
 import { ProjectState, INITIAL_PROJECT_STATE, User } from '../types';
 
 /**
  * DATABASE REPOSITORY LAYER
- * Memisahkan logika Database dari UI Components/Hooks.
- * Mengembalikan data yang sudah di-mapping ke Domain Types aplikasi.
+ * Adjusted for RLS & Content-First Architecture
  */
 
 export const UserRepository = {
     async getCurrentProfile(userId: string): Promise<Partial<DbUser> | null> {
+        // Select explicit columns to ensure api_key is fetched
+        // Removed 'school' column to fix "column does not exist" error
         const { data, error } = await supabase
             .from('users')
-            .select('*')
+            .select('id, email, name, role, api_key, force_password_change, is_active')
             .eq('id', userId)
             .maybeSingle();
         
         if (error) {
-             // Handle "Infinite recursion detected" (42P17) specifically
-             // This happens if the RLS policy on 'users' refers to itself in a loop.
-             // We swallow this error to allow the app to function using Auth Metadata instead.
              if (error.code === '42P17') {
                  console.warn("[Repository] RLS Recursion detected. Using Auth Metadata fallback.");
+                 const { data: { user } } = await supabase.auth.getUser();
+                 if (user && user.id === userId) {
+                     return {
+                         id: user.id,
+                         email: user.email || '',
+                         name: user.user_metadata?.name,
+                         // school removed
+                         role: user.user_metadata?.role || 'user',
+                         force_password_change: user.user_metadata?.force_password_change,
+                         is_active: true 
+                     } as DbUser;
+                 }
                  return null;
              }
              console.warn("Repo: Fetch Profile Error", error);
@@ -37,25 +47,34 @@ export const UserRepository = {
             .order('created_at', { ascending: false });
         
         if (error) {
-            // Safe fallback for Admin dashboard if DB is misconfigured
-            if (error.code === '42P17') return [];
-            throw error;
+            console.error("Error fetching all users:", error);
+            return [];
         }
         return data as User[];
     },
 
-    async upsertUser(user: Partial<User>): Promise<void> {
+    async updateProfile(userId: string, data: Partial<User>): Promise<void> {
         const payload: Partial<DbUser> = {
-            id: user.id,
-            email: user.email!,
-            name: user.name,
-            school: user.school,
-            role: user.role,
-            force_password_change: user.force_password_change,
+            name: data.name,
+            // school removed
             updated_at: new Date().toISOString()
         };
+        
+        // Only update API Key if explicitly provided (can be empty string to clear)
+        if (data.apiKey !== undefined) {
+            payload.api_key = data.apiKey;
+        }
 
-        const { error } = await supabase.from('users').upsert(payload);
+        const { error } = await supabase.from('users').update(payload).eq('id', userId);
+        if (error) throw error;
+    },
+
+    async markPasswordChanged(userId: string): Promise<void> {
+        const { error } = await supabase
+            .from('users')
+            .update({ force_password_change: false })
+            .eq('id', userId);
+        
         if (error) throw error;
     },
 
@@ -67,34 +86,27 @@ export const UserRepository = {
     async getStats(): Promise<{ users: number; projects: number }> {
         let userCount = 0;
         let projectCount = 0;
-        
         try {
             const { count } = await supabase.from('users').select('*', { count: 'exact', head: true });
             userCount = count || 0;
             const { count: pCount } = await supabase.from('projects').select('*', { count: 'exact', head: true });
             projectCount = pCount || 0;
         } catch (e) {}
-
         return { users: userCount, projects: projectCount };
     }
 };
 
 export const ProjectRepository = {
-    // UPDATED: Return type allows null for error handling
     async getProjectsByUser(email: string): Promise<ProjectState[] | null> {
         const { data, error } = await supabase
             .from('projects')
             .select('*')
-            .eq('user_email', email)
             .order('updated_at', { ascending: false });
 
         if (error) {
-            // Handle missing table
             if (error.code === '42P01') return []; 
-
-            // FIX: Handle RLS Recursion (42P17) gracefully
             if (error.code === '42P17') {
-                 console.warn("[Repository] RLS Recursion (42P17) detected. Returning null to preserve local state.");
+                 console.warn("[Repository] RLS Recursion (42P17).");
                  return null;
             }
             throw error;
@@ -103,49 +115,37 @@ export const ProjectRepository = {
         if (!data) return [];
 
         // Mapper: DbProject -> ProjectState
-        return data.map((d: DbProject) => ({
-            ...INITIAL_PROJECT_STATE,
-            ...d.content, // Spread JSON content first
-            id: d.id, // Ensure ID matches DB
-            // Override with indexed columns to ensure sync
-            title: d.title,
-            schoolName: d.school_name,
-            phase: d.phase,
-            targetClass: d.target_class,
-            totalJpAnnual: d.total_jp_annual,
-            projectJpAllocation: d.project_jp_allocation,
-            selectedTheme: d.selected_theme,
-            activityFormat: d.activity_format,
-            analysisSummary: d.analysis_summary
-        }));
+        return data.map((d: DbProject) => {
+            const content = d.content || {};
+            
+            const projectState: ProjectState = {
+                ...INITIAL_PROJECT_STATE,
+                ...content, 
+                id: d.id, 
+            };
+
+            if (d.title) projectState.title = d.title;
+            if (d.phase) projectState.phase = d.phase;
+            if (d.target_class) projectState.targetClass = d.target_class;
+            
+            return projectState;
+        });
     },
 
     async saveProject(project: ProjectState, user: { id: string; email: string }): Promise<void> {
-        // Mapper: ProjectState -> DbProject
         const payload: Partial<DbProject> = {
             id: project.id,
-            user_id: user.id,
-            user_email: user.email,
             title: project.title,
-            school_name: project.schoolName,
             phase: project.phase,
             target_class: project.targetClass,
-            total_jp_annual: project.totalJpAnnual,
-            project_jp_allocation: project.projectJpAllocation,
-            selected_theme: project.selectedTheme,
-            activity_format: project.activityFormat,
-            analysis_summary: project.analysisSummary,
-            content: project, // Store full state in JSONB
+            content: project, 
             updated_at: new Date().toISOString()
         };
 
         const { error } = await supabase.from('projects').upsert(payload);
         
         if (error) {
-            if (error.code === '42P17') {
-                console.warn("[Repository] RLS Infinite Recursion detected during Save. Ignoring error to allow local persist.");
-                return;
-            }
+            if (error.code === '42P17') return;
             throw error;
         }
     },
@@ -153,7 +153,7 @@ export const ProjectRepository = {
     async deleteProject(projectId: string): Promise<void> {
         const { error } = await supabase.from('projects').delete().eq('id', projectId);
         if (error) {
-             if (error.code === '42P17') return; // Ignore RLS loop on delete
+             if (error.code === '42P17') return;
              throw error;
         }
     }

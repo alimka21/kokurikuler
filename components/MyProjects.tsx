@@ -10,11 +10,12 @@ import {
   ChevronDown,
   ChevronRight,
   Eye,
-  ArrowRight
+  ArrowRight,
+  Download
 } from 'lucide-react';
 import { ProjectState } from '../types';
 import Swal from 'sweetalert2';
-import { generateAnnualProgramDocx } from '../utils/docxGenerator';
+import { generateAnnualProgramDocx, generateAndDownloadDocx } from '../utils/docxGenerator';
 import DocumentPreview from './common/DocumentPreview';
 
 interface MyProjectsProps {
@@ -74,6 +75,22 @@ const MyProjects: React.FC<MyProjectsProps> = ({
               icon: 'success',
               title: 'Berhasil Unduh',
               text: `Program Tahunan ${className} telah diunduh.`,
+              timer: 1500,
+              showConfirmButton: false
+          });
+      } catch (e) {
+          Swal.fire('Error', 'Gagal mengunduh dokumen.', 'error');
+      }
+  };
+
+  const handleDownloadSingle = async () => {
+      if (!previewProject) return;
+      try {
+          await generateAndDownloadDocx(previewProject);
+          Swal.fire({
+              icon: 'success',
+              title: 'Unduhan Dimulai',
+              text: 'Dokumen sedang diproses...',
               timer: 1500,
               showConfirmButton: false
           });
@@ -147,7 +164,7 @@ const MyProjects: React.FC<MyProjectsProps> = ({
           </div>
       ) : (
         <div className="space-y-6">
-            {Object.entries(groupedProjects).map(([className, projects]) => {
+            {Object.entries(groupedProjects).map(([className, projects]: [string, ProjectState[]]) => {
                 const totalUsed = projects.reduce((acc, p) => acc + p.projectJpAllocation, 0);
                 const annualTarget = projects[0]?.totalJpAnnual || 0;
                 const isOverLimit = totalUsed > annualTarget;
@@ -279,14 +296,23 @@ const MyProjects: React.FC<MyProjectsProps> = ({
                      </div>
                 </div>
 
-                <div className="mt-4 flex justify-center gap-4">
+                <div className="mt-4 flex flex-col sm:flex-row justify-center gap-4">
                     <button onClick={() => setPreviewProject(null)} className="px-6 py-3 bg-white text-slate-900 rounded-xl font-bold hover:bg-slate-200 transition-colors">
                         Tutup
                     </button>
+                    
+                    {/* Download Button */}
+                    <button 
+                        onClick={handleDownloadSingle}
+                        className="px-6 py-3 bg-slate-800 text-white rounded-xl font-bold hover:bg-slate-900 transition-colors flex items-center justify-center gap-2 shadow-lg"
+                    >
+                        <Download className="w-5 h-5" /> Unduh .docx
+                    </button>
+
                     {!previewProject.assessmentPlan && (
                         <button 
                             onClick={handleEditFromPreview}
-                            className="px-8 py-3 bg-primary text-white rounded-xl font-bold hover:bg-primary-hover shadow-lg shadow-primary/30 flex items-center gap-2 transition-all"
+                            className="px-8 py-3 bg-primary text-white rounded-xl font-bold hover:bg-primary-hover shadow-lg shadow-primary/30 flex items-center justify-center gap-2 transition-all"
                         >
                             Lanjut Edit / Revisi <ArrowRight className="w-5 h-5" />
                         </button>

@@ -2,15 +2,14 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { User } from '../types';
 import { supabase } from '../services/supabaseClient';
-import { mapSessionToUser } from '../utils/authHelpers';
-import { saveSessionToCache, restoreSessionFromCache, clearAllAppStorage } from '../utils/sessionManager';
 import { UserRepository } from '../services/repository';
+import { tokenManager } from '../utils/tokenManager';
+import Swal from 'sweetalert2';
 
 interface AuthContextType {
     user: User | null;
     isLoading: boolean;
-    connectionError: string | null;
-    login: (user: User) => void;
+    login: (user: User) => void; 
     logout: () => Promise<void>;
     updateUser: (user: User) => void;
 }
@@ -20,95 +19,38 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const [user, setUser] = useState<User | null>(null);
     const [isLoading, setIsLoading] = useState(true);
-    const [connectionError, setConnectionError] = useState<string | null>(null);
 
-    // --- Core Session Logic moved from App.tsx ---
     useEffect(() => {
         let mounted = true;
 
-        // 1. LAZY LOAD (Cache)
-        const cachedUser = restoreSessionFromCache();
-        if (cachedUser) {
-            setUser(cachedUser);
-            setIsLoading(false);
-        }
-
-        // 2. FETCH & SYNC
-        const fetchAndSyncUser = async (sessionUser: any) => {
+        // 1. Get Initial Session
+        const getInitialSession = async () => {
             try {
-                // Base User
-                const baseUser = mapSessionToUser(sessionUser);
-                if (!cachedUser && mounted) setUser(baseUser);
-
-                // DB Hydration via Repository
-                let dbProfile = null;
-                try {
-                    dbProfile = await UserRepository.getCurrentProfile(sessionUser.id);
-                } catch (err) {
-                    console.warn("DB Profile Fetch Error:", err);
-                }
-
-                if (mounted) {
-                    const mergedUser: User = {
-                        ...baseUser,
-                        ...(dbProfile || {}),
-                        id: baseUser.id,
-                        email: baseUser.email
-                    };
-                    setUser(mergedUser);
-                    saveSessionToCache(mergedUser);
+                const { data: { user: authUser } } = await supabase.auth.getUser();
+                if (authUser && mounted) {
+                    await syncUserProfile(authUser);
+                } else {
+                    if (mounted) setIsLoading(false);
                 }
             } catch (e) {
-                console.error("Session Sync Error:", e);
-            }
-        };
-
-        const initAuth = async () => {
-            if (!cachedUser) setIsLoading(true);
-            setConnectionError(null);
-            
-            try {
-                const { data: { session }, error } = await supabase.auth.getSession();
-                if (error) throw error;
-                
-                if (session?.user) {
-                    await fetchAndSyncUser(session.user);
-                } else {
-                    setUser(null);
-                    clearAllAppStorage(); // Ensure clean state if no session found
-                }
-            } catch (e: any) {
                 console.error("Auth Init Error:", e);
-                if (!cachedUser) {
-                    let msg = e.message || "Gagal memuat sesi.";
-                    const lowerMsg = msg.toLowerCase();
-                    
-                    // Handle network/fetch errors gracefully
-                    if (
-                        lowerMsg.includes("networkerror") || 
-                        lowerMsg.includes("failed to fetch") || 
-                        lowerMsg.includes("load failed") ||
-                        lowerMsg.includes("connection refused")
-                    ) {
-                        msg = "Koneksi ke server gagal. Mohon periksa koneksi internet Anda.";
-                    }
-                    
-                    setConnectionError(msg);
-                }
-            } finally {
                 if (mounted) setIsLoading(false);
             }
         };
 
-        initAuth();
+        getInitialSession();
 
+        // 2. Listen for Auth Changes
         const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-             if (event === 'SIGNED_IN' && session?.user) {
-                 await fetchAndSyncUser(session.user);
-             } else if (event === 'SIGNED_OUT') {
-                 setUser(null);
-                 clearAllAppStorage();
-             }
+            if (session?.user && (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED')) {
+                await syncUserProfile(session.user);
+            } else if (event === 'SIGNED_OUT') {
+                if (mounted) {
+                    setUser(null);
+                    tokenManager.clearKey(); // HYBRID STRATEGY: Cleanup Key
+                    setIsLoading(false);
+                }
+            }
         });
 
         return () => {
@@ -117,24 +59,71 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         };
     }, []);
 
-    const login = (u: User) => {
-        setUser(u);
-        saveSessionToCache(u);
+    // Helper: Merge Auth User with Public User Profile
+    const syncUserProfile = async (authUser: any) => {
+        try {
+            // Fetch additional profile data from public.users
+            const dbProfile = await UserRepository.getCurrentProfile(authUser.id);
+            
+            // GUARD: Check Account Status
+            // If is_active is explicitly false, force logout
+            if (dbProfile?.is_active === false) {
+                await supabase.auth.signOut();
+                setUser(null);
+                Swal.fire({
+                    icon: 'error',
+                    title: 'Akun Dinonaktifkan',
+                    text: 'Akun Anda telah dinonaktifkan oleh Administrator. Silakan hubungi admin sekolah.',
+                    confirmButtonColor: '#d33'
+                });
+                return;
+            }
+
+            // HYBRID STRATEGY: Auto-Restore API Key
+            if (dbProfile?.api_key) {
+                tokenManager.setKey(dbProfile.api_key);
+                console.log("[Auth] API Key restored from profile.");
+            }
+
+            const mergedUser: User = {
+                id: authUser.id,
+                email: authUser.email || '',
+                role: authUser.user_metadata?.role || dbProfile?.role || 'user',
+                name: dbProfile?.name || authUser.user_metadata?.name,
+                // school removed
+                apiKey: dbProfile?.api_key, // Add API Key to context
+                // Critical: Prioritize DB flag for password change
+                force_password_change: dbProfile?.force_password_change ?? false, 
+                is_active: dbProfile?.is_active ?? true,
+                created_at: authUser.created_at
+            };
+            
+            setUser(mergedUser);
+        } catch (e) {
+            console.error("Profile Sync Error", e);
+            // Fallback (Only use if DB fails, but assumes active to avoid lockout during glitch)
+            setUser({
+                id: authUser.id,
+                email: authUser.email || '',
+                role: 'user',
+                force_password_change: false,
+                is_active: true
+            });
+        } finally {
+            setIsLoading(false);
+        }
     };
 
+    const login = (u: User) => setUser(u);
     const logout = async () => {
-        clearAllAppStorage(); // Wipes user session + Project Drafts
+        tokenManager.clearKey(); // HYBRID STRATEGY: Cleanup Key
         await supabase.auth.signOut();
         setUser(null);
     };
-
-    const updateUser = (u: User) => {
-        setUser(u);
-        saveSessionToCache(u);
-    };
+    const updateUser = (u: User) => setUser(u);
 
     return (
-        <AuthContext.Provider value={{ user, isLoading, connectionError, login, logout, updateUser }}>
+        <AuthContext.Provider value={{ user, isLoading, login, logout, updateUser }}>
             {children}
         </AuthContext.Provider>
     );
@@ -142,8 +131,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
 export const useAuth = () => {
     const context = useContext(AuthContext);
-    if (context === undefined) {
-        throw new Error('useAuth must be used within an AuthProvider');
-    }
+    if (context === undefined) throw new Error('useAuth must be used within an AuthProvider');
     return context;
 };

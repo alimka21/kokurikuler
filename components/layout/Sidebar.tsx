@@ -1,6 +1,6 @@
 
 import React, { useMemo } from 'react';
-import { GraduationCap, LayoutDashboard, FolderOpen, CheckCircle, Settings, ShieldCheck, LogOut, UserCircle } from 'lucide-react';
+import { GraduationCap, LayoutDashboard, FolderOpen, CheckCircle, Settings, ShieldCheck, LogOut, UserCircle, Key } from 'lucide-react';
 import { STEPS } from '../../constants';
 import { ProjectState, User } from '../../types';
 
@@ -50,10 +50,21 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, currentView, onChangeView, cu
                         <FolderOpen className={`w-5 h-5 ${currentView === 'projects' ? 'text-primary' : 'text-slate-400 group-hover:text-slate-600'}`} />
                         <span>Projek Saya</span>
                     </button>
+                    
+                    {/* Divider */}
+                    <div className="my-2 border-t border-slate-50"></div>
+                    
                     <button onClick={onEditIdentity} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all font-medium text-sm group ${currentView === 'identity' ? 'bg-primary/5 text-primary' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'}`}>
                         <Settings className={`w-5 h-5 ${currentView === 'identity' ? 'text-primary' : 'text-slate-400 group-hover:text-slate-600'}`} />
                         <span>Data Sekolah</span>
                     </button>
+                    
+                    {/* API Key Menu Item */}
+                    <button onClick={() => onChangeView('apikey')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all font-medium text-sm group ${currentView === 'apikey' ? 'bg-amber-50 text-amber-700' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'}`}>
+                        <Key className={`w-5 h-5 ${currentView === 'apikey' ? 'text-amber-600' : 'text-slate-400 group-hover:text-slate-600'}`} />
+                        <span>API Key AI</span>
+                    </button>
+
                     <button onClick={() => onChangeView('account')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all font-medium text-sm group ${currentView === 'account' ? 'bg-primary/5 text-primary' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'}`}>
                         <UserCircle className={`w-5 h-5 ${currentView === 'account' ? 'text-primary' : 'text-slate-400 group-hover:text-slate-600'}`} />
                         <span>Pengaturan Akun</span>
@@ -100,19 +111,21 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, currentView, onChangeView, cu
             <div className="p-6 border-t border-slate-100 bg-slate-50/50">
                 <div className="flex items-center justify-between mb-3">
                      <div className="flex items-center gap-3">
-                        <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-sm shadow-sm ${user.role === 'admin' ? 'bg-purple-600' : 'bg-slate-400'}`}>
+                        <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-sm shadow-sm ${user.role === 'admin' ? 'bg-amber-600' : 'bg-slate-400'}`}>
                             {user.name ? user.name.charAt(0) : (user.email ? user.email.charAt(0).toUpperCase() : 'U')}
                         </div>
                         <div className="overflow-hidden">
                             <div className="flex items-center gap-1">
                                 <p className="text-sm font-bold text-slate-900 truncate max-w-[120px]">{user.name || 'Pengguna'}</p>
                                 {user.role === 'admin' && (
-                                    <button onClick={() => onChangeView('admin')} className="p-0.5 bg-purple-100 rounded hover:bg-purple-200 transition-colors" title="Buka Admin Panel">
-                                        <ShieldCheck className="w-3 h-3 text-purple-600" />
+                                    <button onClick={() => onChangeView('admin')} className="p-0.5 bg-amber-100 rounded hover:bg-amber-200 transition-colors" title="Buka Admin Panel">
+                                        <ShieldCheck className="w-3 h-3 text-amber-600" />
                                     </button>
                                 )}
                             </div>
-                            <p className="text-xs text-slate-500 truncate max-w-[120px]">{user.school || 'Sekolah Belum Diatur'}</p>
+                            <p className="text-xs text-slate-500 truncate max-w-[120px]">
+                                {user.role === 'admin' ? 'Administrator' : 'Guru'}
+                            </p>
                         </div>
                     </div>
                 </div>

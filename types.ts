@@ -11,19 +11,18 @@ export enum Dimension {
 }
 
 // ARSITEKTUR ROBUST (AppUser Spec):
-// Semua field profil bersifat optional.
-// Role bersifat string flexible untuk mencegah crash jika metadata tidak konsisten.
 export interface User {
   id: string; // Mandatory (Auth ID)
   email: string; // Mandatory (Auth Email)
   
   role?: string; // Optional string ('admin' | 'user' | undefined)
   name?: string; // Optional
-  school?: string; // Optional
-  
+  apiKey?: string; // New: BYOK API Key from DB
+
   // Metadata / State
   is_registered?: boolean; 
   force_password_change?: boolean; 
+  is_active?: boolean; // New: Account Status Flag
   created_at?: string;
 }
 
@@ -99,6 +98,7 @@ export interface AssessmentDimension {
 export interface ProjectState {
   id: string; // Unique ID for the project
   lastUpdated: number; // Timestamp
+  lastStep?: number; // New: Save Wizard Progress
 
   // Identity (Admin Settings - Moved to Sidebar Modal)
   schoolName: string;
@@ -167,6 +167,7 @@ export const INITIAL_CONTEXT_DATA: ContextAnalysisData = {
 export const INITIAL_PROJECT_STATE: ProjectState = {
   id: "", // Will be generated
   lastUpdated: 0,
+  lastStep: 0,
   
   schoolName: "",
   coordinatorName: "",

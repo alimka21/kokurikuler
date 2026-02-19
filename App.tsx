@@ -13,6 +13,7 @@ import MyProjects from './components/MyProjects';
 import Editor from './components/Editor';
 import IdentitySettings from './components/IdentitySettings';
 import AccountSettings from './components/AccountSettings'; 
+import ApiKeySettings from './components/ApiKeySettings'; // New Import
 import AdminDashboard from './components/AdminDashboard'; 
 import Login from './components/Login'; 
 import ForcePasswordChange from './components/ForcePasswordChange'; 
@@ -32,7 +33,7 @@ import StepFinalization from './components/wizard/StepFinalization';
 
 import { ChevronRight, ChevronLeft, Save, AlertTriangle, WifiOff, RotateCcw } from 'lucide-react';
 
-type ViewMode = 'dashboard' | 'projects' | 'wizard' | 'editor' | 'identity' | 'admin' | 'account';
+type ViewMode = 'dashboard' | 'projects' | 'wizard' | 'editor' | 'identity' | 'admin' | 'account' | 'apikey';
 
 // --- SUB-COMPONENT: The Authenticated Layout & Routing ---
 const AuthenticatedApp: React.FC = () => {
@@ -111,6 +112,7 @@ const AuthenticatedApp: React.FC = () => {
             else if (hash === 'editor') setView('editor');
             else if (hash === 'settings') setView('identity');
             else if (hash === 'account') setView('account');
+            else if (hash === 'apikey') setView('apikey');
             else if (hash === 'dashboard') setView('dashboard');
             else if (hash === 'admin') setView('admin'); // Valid admin case
             else {
@@ -144,6 +146,7 @@ const AuthenticatedApp: React.FC = () => {
         else if (view === 'editor') targetHash = 'editor';
         else if (view === 'identity') targetHash = 'settings';
         else if (view === 'account') targetHash = 'account';
+        else if (view === 'apikey') targetHash = 'apikey';
 
         if (hash !== targetHash) {
             if (targetHash === 'admin' && user.role !== 'admin') return;
@@ -225,6 +228,7 @@ const AuthenticatedApp: React.FC = () => {
     else if (view === 'projects') headerTitle = "Library & Projek";
     else if (view === 'identity') headerTitle = "Pengaturan Data Sekolah";
     else if (view === 'account') headerTitle = "Pengaturan Akun";
+    else if (view === 'apikey') headerTitle = "Manajemen API Key";
     else if (view === 'wizard') headerTitle = STEPS[currentStep].title;
 
     const renderStepContent = () => {
@@ -287,6 +291,7 @@ const AuthenticatedApp: React.FC = () => {
                     )}
                     {view === 'identity' && <IdentitySettings project={project} onChange={updateProject} onSave={() => showNotify('Data Sekolah berhasil disimpan!', 'success')} />}
                     {view === 'account' && <AccountSettings user={user!} />}
+                    {view === 'apikey' && <ApiKeySettings user={user!} />}
                     {view === 'wizard' && (
                         <div className="max-w-5xl mx-auto pb-32">
                             <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">

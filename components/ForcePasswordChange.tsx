@@ -1,7 +1,8 @@
 
 import React, { useState } from 'react';
 import { supabase } from '../services/supabaseClient';
-import { Lock, User, Loader2 } from 'lucide-react';
+import { UserRepository } from '../services/repository';
+import { Lock, User, Loader2, ShieldCheck } from 'lucide-react';
 import { InputGroup } from './common/UiKit';
 import Swal from 'sweetalert2';
 
@@ -27,31 +28,32 @@ const ForcePasswordChange: React.FC<Props> = ({ onSuccess }) => {
 
     setLoading(true);
     try {
-        const { error } = await supabase.auth.updateUser({
+        // 1. Update Password in Supabase Auth
+        const { data: { user }, error: authError } = await supabase.auth.updateUser({
             password: password,
-            data: {
-                name: name,
-                force_password_change: false // Reset flag
-            }
+            data: { name: name } // Sync metadata for next session
         });
 
-        if (error) throw error;
+        if (authError) throw authError;
+        if (!user) throw new Error("User not found");
 
-        // Also update users table for consistency
-        const { data: { user } } = await supabase.auth.getUser();
-        if (user) {
-             await supabase.from('users').update({ name: name }).eq('id', user.id);
-        }
+        // 2. Update Flag in Database (public.users)
+        await UserRepository.markPasswordChanged(user.id);
+
+        // 3. Sync Name in Database (public.users)
+        await UserRepository.updateProfile(user.id, { name: name });
 
         Swal.fire({
-            title: 'Berhasil',
-            text: 'Akun Anda telah diaktifkan.',
+            title: 'Akun Diaktifkan',
+            text: 'Password berhasil diubah. Mengalihkan ke dashboard...',
             icon: 'success',
             timer: 1500,
             showConfirmButton: false
         });
         
+        // 4. Trigger UI transition (App.tsx will re-render based on updated context)
         onSuccess();
+
     } catch (err: any) {
         Swal.fire('Gagal', err.message, 'error');
     } finally {
@@ -60,32 +62,32 @@ const ForcePasswordChange: React.FC<Props> = ({ onSuccess }) => {
   };
 
   return (
-    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-900/90 backdrop-blur-sm p-4">
-       <div className="bg-white w-full max-w-md p-8 rounded-3xl shadow-2xl animate-in zoom-in-95">
-           <div className="text-center mb-6">
-               <div className="w-16 h-16 bg-amber-100 text-amber-600 rounded-full flex items-center justify-center mx-auto mb-3">
-                   <Lock className="w-8 h-8" />
+    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-900/90 backdrop-blur-md p-4 animate-in fade-in">
+       <div className="bg-white w-full max-w-md p-8 rounded-3xl shadow-2xl animate-in zoom-in-95 border-t-4 border-amber-500">
+           <div className="text-center mb-8">
+               <div className="w-20 h-20 bg-amber-50 text-amber-500 rounded-full flex items-center justify-center mx-auto mb-4 border border-amber-100 shadow-sm">
+                   <ShieldCheck className="w-10 h-10" />
                </div>
-               <h2 className="text-xl font-bold text-slate-900">Aktivasi Akun</h2>
-               <p className="text-slate-500 text-sm mt-1">
-                   Ini adalah login pertama Anda. Mohon atur Nama Profil dan Password baru untuk keamanan.
+               <h2 className="text-2xl font-black text-slate-900 uppercase tracking-tight">Aktivasi Akun</h2>
+               <p className="text-slate-500 text-sm mt-2 leading-relaxed">
+                   Demi keamanan, Anda wajib mengubah password default dan melengkapi profil sebelum mengakses sistem.
                </p>
            </div>
            
-           <form onSubmit={handleSubmit} className="space-y-4">
-               <InputGroup label="Nama Profil Baru" icon={User} value={name} onChange={setName} placeholder="Nama Anda" />
-               <InputGroup label="Password Baru" icon={Lock} value={password} onChange={setPassword}>
+           <form onSubmit={handleSubmit} className="space-y-5">
+               <InputGroup label="Nama Profil Anda" icon={User} value={name} onChange={setName} placeholder="Contoh: Budi Santoso, S.Pd" />
+               <InputGroup label="Buat Password Baru" icon={Lock} value={password} onChange={setPassword}>
                    <input 
                        type="password"
                        value={password}
                        onChange={(e) => setPassword(e.target.value)}
-                       className="w-full pl-11 p-3.5 bg-slate-50 border border-slate-200 rounded-xl font-bold"
+                       className="w-full pl-11 p-3.5 bg-slate-50 border border-slate-200 rounded-xl font-bold focus:bg-white focus:border-amber-500 focus:ring-2 focus:ring-amber-200 transition-all"
                        placeholder="Minimal 6 karakter"
                    />
                </InputGroup>
                
-               <button type="submit" disabled={loading} className="w-full py-3.5 bg-primary text-white rounded-xl font-bold mt-4 flex items-center justify-center gap-2">
-                   {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : "Simpan & Lanjutkan"}
+               <button type="submit" disabled={loading} className="w-full py-4 bg-slate-900 hover:bg-slate-800 text-white rounded-xl font-bold mt-4 flex items-center justify-center gap-2 shadow-lg transition-all transform hover:-translate-y-0.5">
+                   {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : "Simpan Password & Masuk"}
                </button>
            </form>
        </div>

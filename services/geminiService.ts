@@ -2,6 +2,7 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { Dimension, Activity, ThemeOption, ProjectState, ProjectGoal, CreativeIdeaOption } from "../types";
 import { SUBJECTS_BY_PHASE, DEFAULT_SUBJECTS } from "../constants";
+import { tokenManager } from "../utils/tokenManager";
 
 // Safe env access
 const getEnv = (key: string) => {
@@ -23,16 +24,37 @@ const getEnv = (key: string) => {
     return '';
 };
 
-const apiKey = getEnv('VITE_GEMINI_API_KEY') || getEnv('API_KEY'); 
+// DYNAMIC CLIENT FACTORY
+// Strategi: Prioritaskan Custom Key (TokenManager), Fallback ke System Key (Env)
+const getAiClient = (): GoogleGenAI => {
+    const customKey = tokenManager.getKey();
+    const systemKey = getEnv('VITE_GEMINI_API_KEY') || getEnv('API_KEY');
+    
+    const finalKey = customKey || systemKey;
 
-let ai: GoogleGenAI | null = null;
-try {
-    if (apiKey && apiKey.trim().length > 0) {
-        ai = new GoogleGenAI({ apiKey: apiKey.trim() });
+    if (!finalKey || finalKey.trim().length === 0) {
+        throw new Error("INVALID_API_KEY");
     }
-} catch (e) {
-    console.error("Failed to initialize Gemini Client:", e);
+
+    return new GoogleGenAI({ apiKey: finalKey.trim() });
 }
+
+// Validation Utility for UI
+export const validateApiKey = async (key: string): Promise<boolean> => {
+    try {
+        const tempClient = new GoogleGenAI({ apiKey: key });
+        // Request paling ringan untuk tes koneksi
+        await tempClient.models.generateContent({
+            model: 'gemini-2.5-flash',
+            contents: 'Test connection',
+        });
+        return true;
+    } catch (e) {
+        console.error("API Key Validation Failed:", e);
+        return false;
+    }
+}
+
 
 // Default model for most tasks (Analysis, Ideas, etc.)
 const MODEL_NAME = 'gemini-2.5-flash'; 
@@ -96,10 +118,9 @@ async function generateWithRetry<T>(
     prompt: string,
     validator: (data: any) => { isValid: boolean; error?: string },
     config: any = {},
-    maxRetries = 4
+    maxRetries = 3
 ): Promise<T | null> {
     
-    checkAI();
     let currentPrompt = prompt;
     let attempts = 0;
 
@@ -110,7 +131,10 @@ async function generateWithRetry<T>(
         try {
             console.log(`[AI-Agent] ${operationName} (${targetModel}) - Attempt ${attempts + 1}`);
             
-            const response = await ai!.models.generateContent({
+            // Get Dynamic Client
+            const ai = getAiClient();
+
+            const response = await ai.models.generateContent({
                 model: targetModel,
                 contents: currentPrompt,
                 config: {
@@ -147,7 +171,9 @@ async function generateWithRetry<T>(
 
         } catch (error: any) {
             attempts++;
-            const msg = error.message || "Unknown Error";
+            const msg = error.message || error.toString() || "Unknown Error";
+            const isQuotaError = msg.includes("429") || msg.includes("quota") || msg.includes("RESOURCE_EXHAUSTED");
+            
             console.warn(`[AI-Agent] Correction triggered: ${msg}`);
 
             // If we run out of retries, throw or return fallback
@@ -158,19 +184,30 @@ async function generateWithRetry<T>(
                 return null; 
             }
             
-            // Backoff delay to prevent rate limiting or rapid failures
-            await new Promise(resolve => setTimeout(resolve, 1500 * attempts));
+            // Exponential Backoff
+            // If quota error, wait longer: 5s, 10s...
+            // Else: 2s, 4s...
+            const baseWait = isQuotaError ? 5000 : 2000;
+            const waitTime = baseWait * Math.pow(1.5, attempts - 1);
+            
+            console.log(`[AI-Agent] Waiting ${Math.round(waitTime)}ms before retry...`);
+            await new Promise(resolve => setTimeout(resolve, waitTime));
 
             // FEEDBACK LOOP: Append the error to the prompt so the AI can fix it
-            currentPrompt += `\n\n[SYSTEM ERROR]: Output sebelumnya SALAH. \nError: ${msg}. \nPerbaiki kesalahan ini dan generate ulang JSON yang valid. HANYA JSON.`;
+            // Only for logic/json errors, not network/quota errors
+            if (!isQuotaError) {
+                currentPrompt += `\n\n[SYSTEM ERROR]: Output sebelumnya SALAH. \nError: ${msg}. \nPerbaiki kesalahan ini dan generate ulang JSON yang valid. HANYA JSON.`;
+            }
         }
     }
     return null;
 }
 
 const handleGeminiError = (error: any) => {
-    const msg = error?.toString() || "";
-    if (msg.includes("429") || msg.includes("Resource has been exhausted") || msg.includes("Quota exceeded")) {
+    // Robust error message extraction to handle various error object structures
+    const msg = error?.message || error?.error?.message || JSON.stringify(error) || "";
+    
+    if (msg.includes("429") || msg.includes("Resource has been exhausted") || msg.includes("Quota exceeded") || msg.includes("RESOURCE_EXHAUSTED")) {
         throw new Error("QUOTA_EXCEEDED");
     }
     if (msg.includes("API_KEY") || msg.includes("403") || msg.includes("400") || msg.includes("INVALID_ARGUMENT")) {
@@ -179,9 +216,6 @@ const handleGeminiError = (error: any) => {
     // Don't re-throw logic errors from the loop, just log them
 };
 
-const checkAI = () => {
-    if (!ai) throw new Error("INVALID_API_KEY");
-};
 
 // --- IMPLEMENTATION ---
 

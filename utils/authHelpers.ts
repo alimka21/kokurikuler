@@ -29,7 +29,7 @@ export const mapSessionToUser = (sessionUser: any): User => {
         
         // Optional Fields - Do NOT assume they exist
         name: meta.name || undefined,
-        school: meta.school || undefined,
+        // school removed
         role: role, 
         
         // Extra state
