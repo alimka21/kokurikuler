@@ -1,8 +1,7 @@
-
 import React, { useMemo } from 'react';
 import { GraduationCap, LayoutDashboard, FolderOpen, CheckCircle, Settings, ShieldCheck, LogOut, UserCircle, Key } from 'lucide-react';
 import { STEPS } from '../../constants';
-import { ProjectState, User } from '../../types';
+import { User } from '../../types';
 
 interface SidebarProps {
     isOpen: boolean;
@@ -11,14 +10,17 @@ interface SidebarProps {
     currentStep: number;
     onStepClick: (idx: number) => void;
     user: User;
-    projectData?: ProjectState;
     onEditIdentity: () => void; 
     onLogout: () => void; 
 }
 
-const Sidebar: React.FC<SidebarProps> = ({ isOpen, currentView, onChangeView, currentStep, onStepClick, user, onEditIdentity, onLogout }) => {
+// Sidebar now uses props passed from App (which gets them from Store).
+// Since App controls the views, Sidebar doesn't need to connect to store directly 
+// to avoid complexity, but relies on App passing the correct state.
+// However, to ensure Sidebar doesn't re-render unnecessarily, we memoize it.
+
+const Sidebar: React.FC<SidebarProps> = React.memo(({ isOpen, currentView, onChangeView, currentStep, onStepClick, user, onEditIdentity, onLogout }) => {
     
-    // Calculate progress percentage
     const progress = useMemo(() => {
         return Math.round(((currentStep + 1) / STEPS.length) * 100);
     }, [currentStep]);
@@ -51,7 +53,6 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, currentView, onChangeView, cu
                         <span>Projek Saya</span>
                     </button>
                     
-                    {/* Divider */}
                     <div className="my-2 border-t border-slate-50"></div>
                     
                     <button onClick={onEditIdentity} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all font-medium text-sm group ${currentView === 'identity' ? 'bg-primary/5 text-primary' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'}`}>
@@ -59,7 +60,6 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, currentView, onChangeView, cu
                         <span>Data Sekolah</span>
                     </button>
                     
-                    {/* API Key Menu Item */}
                     <button onClick={() => onChangeView('apikey')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all font-medium text-sm group ${currentView === 'apikey' ? 'bg-amber-50 text-amber-700' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'}`}>
                         <Key className={`w-5 h-5 ${currentView === 'apikey' ? 'text-amber-600' : 'text-slate-400 group-hover:text-slate-600'}`} />
                         <span>API Key AI</span>
@@ -71,7 +71,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, currentView, onChangeView, cu
                     </button>
                 </div>
 
-                {/* Wizard Steps (Always visible now) */}
+                {/* Wizard Steps */}
                 <div className="space-y-2">
                     <div className="flex items-center justify-between px-3 mb-2">
                         <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest">Tahapan Projek</h3>
@@ -82,7 +82,6 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, currentView, onChangeView, cu
                     <div className="relative pl-3 ml-2 border-l border-slate-100 space-y-1">
                         {STEPS.map((step, idx) => {
                             const isActive = currentView === 'wizard' && idx === currentStep;
-                            // Change logic: Completed if index is less than current step, regardless of view
                             const isCompleted = idx < currentStep;
 
                             return (
@@ -107,7 +106,6 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, currentView, onChangeView, cu
                 </div>
             </div>
 
-            {/* Footer User Profile */}
             <div className="p-6 border-t border-slate-100 bg-slate-50/50">
                 <div className="flex items-center justify-between mb-3">
                      <div className="flex items-center gap-3">
@@ -129,15 +127,12 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, currentView, onChangeView, cu
                         </div>
                     </div>
                 </div>
-                <button 
-                    onClick={onLogout}
-                    className="w-full flex items-center justify-center gap-2 px-3 py-2 text-xs font-bold text-slate-500 bg-white border border-slate-200 rounded-lg hover:text-red-600 hover:bg-red-50 hover:border-red-100 transition-all"
-                >
+                <button onClick={onLogout} className="w-full flex items-center justify-center gap-2 px-3 py-2 text-xs font-bold text-slate-500 bg-white border border-slate-200 rounded-lg hover:text-red-600 hover:bg-red-50 hover:border-red-100 transition-all">
                     <LogOut className="w-3.5 h-3.5" /> Keluar
                 </button>
             </div>
         </aside>
     );
-};
+});
 
 export default Sidebar;
