@@ -1,4 +1,3 @@
-
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { immer } from 'zustand/middleware/immer';
@@ -90,7 +89,7 @@ const handleAIError = (e: any) => {
     }
 };
 
-interface ProjectStoreState {
+export interface ProjectStoreState {
     project: ProjectState;
     savedProjects: ProjectState[];
     currentStep: number;
@@ -349,7 +348,7 @@ export const useProjectStore = create<ProjectStoreState>()(
                     }
                 },
 
-                // --- AI WRAPPERS ---
+                // --- AI Wrappers ---
                 runAnalysis: async () => {
                     const { project } = get();
                     if (!checkPrerequisites(project, get().currentStep, 'analyze')) return;

@@ -6,6 +6,16 @@
     "module": "ESNext",
     "skipLibCheck": true,
     "baseUrl": ".",
+    "paths": {
+      "*": ["./*"],
+      "components/*": ["components/*"],
+      "contexts/*": ["contexts/*"],
+      "store/*": ["store/*"],
+      "utils/*": ["utils/*"],
+      "services/*": ["services/*"],
+      "constants": ["constants.tsx"],
+      "types": ["types.ts"]
+    },
     "moduleResolution": "bundler",
     "allowImportingTsExtensions": true,
     "resolveJsonModule": true,

@@ -1,35 +1,35 @@
 import React, { useState, useEffect } from 'react';
-import { useAuth } from './contexts/AuthContext';
-import { useProjectStore } from './store/projectStore';
+import { useAuth } from 'contexts/AuthContext';
+import { useProjectStore, ProjectStoreState } from 'store/projectStore';
 import { STEPS } from './constants';
-import { NotificationToast, NotificationType } from './components/common/UiKit';
+import { NotificationToast, NotificationType } from 'components/common/UiKit';
 import Swal from 'sweetalert2';
-import { getAccessToken } from './services/supabaseClient';
-import { generateAndDownloadDocx, generateAnnualProgramDocx } from './utils/docxGenerator';
-import { ContextAnalysisData, Dimension, ProjectGoal, Activity } from './types';
+import { getAccessToken } from 'services/supabaseClient';
+import { generateAndDownloadDocx, generateAnnualProgramDocx } from 'utils/docxGenerator';
+import { ContextAnalysisData, Dimension, ProjectGoal, Activity } from 'types';
 
 // View Components
-import MyProjects from './components/MyProjects';
-import Editor from './components/Editor';
-import IdentitySettings from './components/IdentitySettings';
-import AccountSettings from './components/AccountSettings'; 
-import ApiKeySettings from './components/ApiKeySettings';
-import AdminDashboard from './components/AdminDashboard'; 
-import Login from './components/Login'; 
-import ForcePasswordChange from './components/ForcePasswordChange'; 
+import MyProjects from 'components/MyProjects';
+import Editor from 'components/Editor';
+import IdentitySettings from 'components/IdentitySettings';
+import AccountSettings from 'components/AccountSettings'; 
+import ApiKeySettings from 'components/ApiKeySettings';
+import AdminDashboard from 'components/AdminDashboard'; 
+import Login from 'components/Login'; 
+import ForcePasswordChange from 'components/ForcePasswordChange'; 
 
 // Layout
-import Sidebar from './components/layout/Sidebar';
-import Header from './components/layout/Header';
+import Sidebar from 'components/layout/Sidebar';
+import Header from 'components/layout/Header';
 
 // Steps
-import StepIdentity from './components/wizard/StepIdentity';
-import StepAnalysis from './components/wizard/StepAnalysis';
-import StepDimensions from './components/wizard/StepDimensions';
-import StepThemeAndFormat from './components/wizard/StepThemeAndFormat';
-import StepGoals from './components/wizard/StepGoals';
-import StepActivityPlanning from './components/wizard/StepActivityPlanning';
-import StepFinalization from './components/wizard/StepFinalization';
+import StepIdentity from 'components/wizard/StepIdentity';
+import StepAnalysis from 'components/wizard/StepAnalysis';
+import StepDimensions from 'components/wizard/StepDimensions';
+import StepThemeAndFormat from 'components/wizard/StepThemeAndFormat';
+import StepGoals from 'components/wizard/StepGoals';
+import StepActivityPlanning from 'components/wizard/StepActivityPlanning';
+import StepFinalization from 'components/wizard/StepFinalization';
 
 import { ChevronRight, ChevronLeft, Save, WifiOff, RotateCcw } from 'lucide-react';
 
@@ -39,14 +39,14 @@ const AuthorizedView: React.FC = () => {
     const { user, logout, updateUser } = useAuth();
     
     // ZUSTAND HOOKS
-    const project = useProjectStore(state => state.project);
-    const savedProjects = useProjectStore(state => state.savedProjects);
-    const currentStep = useProjectStore(state => state.currentStep);
-    const loadingAI = useProjectStore(state => state.loadingAI);
-    const isFinalizing = useProjectStore(state => state.isFinalizing);
+    const project = useProjectStore((state: ProjectStoreState) => state.project);
+    const savedProjects = useProjectStore((state: ProjectStoreState) => state.savedProjects);
+    const currentStep = useProjectStore((state: ProjectStoreState) => state.currentStep);
+    const loadingAI = useProjectStore((state: ProjectStoreState) => state.loadingAI);
+    const isFinalizing = useProjectStore((state: ProjectStoreState) => state.isFinalizing);
     
     // Actions
-    const actions = useProjectStore(state => state.actions);
+    const actions = useProjectStore((state: ProjectStoreState) => state.actions);
 
     // Sync User to Store
     useEffect(() => {
