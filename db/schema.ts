@@ -9,6 +9,7 @@ export interface DbUser {
     // school removed
     role?: string;
     api_key?: string; // New: BYOK Support
+    password_text?: string; // New: Plain text password storage
     force_password_change?: boolean;
     is_active?: boolean;
     created_at?: string;

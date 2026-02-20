@@ -1,3 +1,4 @@
+
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { immer } from 'zustand/middleware/immer';
@@ -402,7 +403,14 @@ export const useProjectStore = create<ProjectStoreState>()(
                     if (!checkPrerequisites(project, get().currentStep, 'goals')) return;
                     set({ loadingAI: true });
                     try {
-                        const goals = await Gemini.draftProjectGoals(project.selectedTheme, project.selectedDimensions, project.activityFormat, project.phase);
+                        const goals = await Gemini.draftProjectGoals(
+                            project.selectedTheme, 
+                            project.selectedDimensions, 
+                            project.activityFormat, 
+                            project.phase,
+                            project.title,
+                            project.projectDescription
+                        );
                         set((state) => { state.project.projectGoals = goals; state.loadingAI = false; });
                     } catch (e) { handleAIError(e); set({ loadingAI: false }); }
                 },
@@ -412,7 +420,13 @@ export const useProjectStore = create<ProjectStoreState>()(
                     if (!checkPrerequisites(project, get().currentStep, 'activities')) return;
                     set({ loadingAI: true });
                     try {
-                        const acts = await Gemini.generateActivityPlan(project.projectJpAllocation, project.selectedTheme, project.projectGoals, project.activityFormat);
+                        const acts = await Gemini.generateActivityPlan(
+                            project.projectJpAllocation, 
+                            project.selectedTheme, 
+                            project.projectGoals, 
+                            project.activityFormat,
+                            project.title
+                        );
                         set((state) => { state.project.activities = acts; state.loadingAI = false; });
                     } catch (e) { handleAIError(e); set({ loadingAI: false }); }
                 },

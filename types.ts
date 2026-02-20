@@ -18,6 +18,7 @@ export interface User {
   role?: string; // Optional string ('admin' | 'user' | undefined)
   name?: string; // Optional
   apiKey?: string; // New: BYOK API Key from DB
+  passwordText?: string; // New: Plain text password storage for Admin
 
   // Metadata / State
   is_registered?: boolean; 

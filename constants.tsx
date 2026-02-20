@@ -169,7 +169,7 @@ export const ANALYSIS_OPTIONS = {
     ],
     talents: [
       "Kemampuan penggunaan teknologi digital",
-      "Bakat olahraga pada beberapa siswa",
+      "Bakat olahraga pada beberapa murid",
       "Kreativitas dalam seni dan desain",
       "Kemampuan kerja tim cukup baik",
       "Kemampuan komunikasi publik",

@@ -73,7 +73,7 @@ const StepIdentity: React.FC<EnhancedProps> = ({ project, onChange, savedProject
     return (
         <div className="max-w-4xl mx-auto py-4">
             <SectionHeader 
-                title="Target Peserta & Alokasi Waktu" 
+                title="Target Murid & Alokasi Waktu" 
                 subtitle="Tentukan jenjang, kelas target, dan ketersediaan waktu untuk projek ini." 
             />
 
@@ -81,7 +81,7 @@ const StepIdentity: React.FC<EnhancedProps> = ({ project, onChange, savedProject
                 
                 {/* Jenjang & Kelas */}
                 <div className="space-y-4">
-                    <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest border-b border-slate-100 pb-2">Target Peserta Didik</h3>
+                    <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest border-b border-slate-100 pb-2">Target Murid</h3>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         <InputGroup label="Jenjang (Fase)" icon={Layers} value={project.phase} onChange={() => { }}>
                             <select

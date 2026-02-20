@@ -164,7 +164,7 @@ const StepThemeAndFormat: React.FC<Props> = ({
                             </div>
                             <div>
                                 <h3 className="text-xl font-bold text-slate-900">3. Ide Projek Kreatif</h3>
-                                <p className="text-slate-500 text-sm">Nama projek yang menarik & relevan untuk siswa.</p>
+                                <p className="text-slate-500 text-sm">Nama projek yang menarik & relevan untuk murid.</p>
                             </div>
                         </div>
                         <div className="w-full sm:w-auto">

@@ -1,5 +1,6 @@
+
 import React, { useMemo } from 'react';
-import { GraduationCap, LayoutDashboard, FolderOpen, CheckCircle, Settings, ShieldCheck, LogOut, UserCircle, Key } from 'lucide-react';
+import { GraduationCap, FolderOpen, CheckCircle, Settings, ShieldCheck, LogOut, UserCircle, Key } from 'lucide-react';
 import { STEPS } from '../../constants';
 import { User } from '../../types';
 
@@ -13,11 +14,6 @@ interface SidebarProps {
     onEditIdentity: () => void; 
     onLogout: () => void; 
 }
-
-// Sidebar now uses props passed from App (which gets them from Store).
-// Since App controls the views, Sidebar doesn't need to connect to store directly 
-// to avoid complexity, but relies on App passing the correct state.
-// However, to ensure Sidebar doesn't re-render unnecessarily, we memoize it.
 
 const Sidebar: React.FC<SidebarProps> = React.memo(({ isOpen, currentView, onChangeView, currentStep, onStepClick, user, onEditIdentity, onLogout }) => {
     
@@ -39,35 +35,26 @@ const Sidebar: React.FC<SidebarProps> = React.memo(({ isOpen, currentView, onCha
             </div>
 
             {/* Navigation */}
-            <div className="flex-1 overflow-y-auto py-8 px-6 space-y-8">
+            <div className="flex-1 overflow-y-auto py-8 px-6 space-y-8 flex flex-col">
                 
                 {/* Main Menu */}
                 <div className="space-y-2">
                     <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest px-3 mb-2">Menu Utama</h3>
-                    <button onClick={() => onChangeView('dashboard')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all font-medium text-sm group ${currentView === 'dashboard' ? 'bg-primary/5 text-primary' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'}`}>
-                        <LayoutDashboard className={`w-5 h-5 ${currentView === 'dashboard' ? 'text-primary' : 'text-slate-400 group-hover:text-slate-600'}`} />
-                        <span>Dashboard</span>
-                    </button>
+                    {user.role === 'admin' && (
+                         <button onClick={() => onChangeView('admin')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all font-medium text-sm group ${currentView === 'admin' ? 'bg-primary/5 text-primary' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'}`}>
+                            <ShieldCheck className={`w-5 h-5 ${currentView === 'admin' ? 'text-primary' : 'text-slate-400 group-hover:text-slate-600'}`} />
+                            <span>Admin Panel</span>
+                        </button>
+                    )}
+                    {/* Dashboard Removed per request */}
                     <button onClick={() => onChangeView('projects')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all font-medium text-sm group ${currentView === 'projects' ? 'bg-primary/5 text-primary' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'}`}>
                         <FolderOpen className={`w-5 h-5 ${currentView === 'projects' ? 'text-primary' : 'text-slate-400 group-hover:text-slate-600'}`} />
                         <span>Projek Saya</span>
                     </button>
                     
-                    <div className="my-2 border-t border-slate-50"></div>
-                    
                     <button onClick={onEditIdentity} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all font-medium text-sm group ${currentView === 'identity' ? 'bg-primary/5 text-primary' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'}`}>
                         <Settings className={`w-5 h-5 ${currentView === 'identity' ? 'text-primary' : 'text-slate-400 group-hover:text-slate-600'}`} />
                         <span>Data Sekolah</span>
-                    </button>
-                    
-                    <button onClick={() => onChangeView('apikey')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all font-medium text-sm group ${currentView === 'apikey' ? 'bg-amber-50 text-amber-700' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'}`}>
-                        <Key className={`w-5 h-5 ${currentView === 'apikey' ? 'text-amber-600' : 'text-slate-400 group-hover:text-slate-600'}`} />
-                        <span>API Key AI</span>
-                    </button>
-
-                    <button onClick={() => onChangeView('account')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all font-medium text-sm group ${currentView === 'account' ? 'bg-primary/5 text-primary' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'}`}>
-                        <UserCircle className={`w-5 h-5 ${currentView === 'account' ? 'text-primary' : 'text-slate-400 group-hover:text-slate-600'}`} />
-                        <span>Pengaturan Akun</span>
                     </button>
                 </div>
 
@@ -104,8 +91,23 @@ const Sidebar: React.FC<SidebarProps> = React.memo(({ isOpen, currentView, onCha
                         })}
                     </div>
                 </div>
+
+                {/* Settings Menu (Moved Up) */}
+                <div className="space-y-2 pt-4 border-t border-slate-50">
+                    <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest px-3 mb-2">Pengaturan</h3>
+                    <button onClick={() => onChangeView('apikey')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all font-medium text-sm group ${currentView === 'apikey' ? 'bg-amber-50 text-amber-700' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'}`}>
+                        <Key className={`w-5 h-5 ${currentView === 'apikey' ? 'text-amber-600' : 'text-slate-400 group-hover:text-slate-600'}`} />
+                        <span>API Key AI</span>
+                    </button>
+
+                    <button onClick={() => onChangeView('account')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all font-medium text-sm group ${currentView === 'account' ? 'bg-primary/5 text-primary' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'}`}>
+                        <UserCircle className={`w-5 h-5 ${currentView === 'account' ? 'text-primary' : 'text-slate-400 group-hover:text-slate-600'}`} />
+                        <span>Pengaturan Akun</span>
+                    </button>
+                </div>
             </div>
 
+            {/* Footer Profile */}
             <div className="p-6 border-t border-slate-100 bg-slate-50/50">
                 <div className="flex items-center justify-between mb-3">
                      <div className="flex items-center gap-3">
@@ -116,9 +118,9 @@ const Sidebar: React.FC<SidebarProps> = React.memo(({ isOpen, currentView, onCha
                             <div className="flex items-center gap-1">
                                 <p className="text-sm font-bold text-slate-900 truncate max-w-[120px]">{user.name || 'Pengguna'}</p>
                                 {user.role === 'admin' && (
-                                    <button onClick={() => onChangeView('admin')} className="p-0.5 bg-amber-100 rounded hover:bg-amber-200 transition-colors" title="Buka Admin Panel">
+                                    <div className="p-0.5 bg-amber-100 rounded" title="Administrator">
                                         <ShieldCheck className="w-3 h-3 text-amber-600" />
-                                    </button>
+                                    </div>
                                 )}
                             </div>
                             <p className="text-xs text-slate-500 truncate max-w-[120px]">

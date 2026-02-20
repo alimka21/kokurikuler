@@ -28,19 +28,22 @@ const ForcePasswordChange: React.FC<Props> = ({ onSuccess }) => {
 
     setLoading(true);
     try {
-        // 1. Update Password in Supabase Auth
+        // 1. Update Password in Supabase Auth AND Update Metadata Flag
+        // We set force_password_change to FALSE in metadata here.
         const { data: { user }, error: authError } = await supabase.auth.updateUser({
             password: password,
-            data: { name: name } // Sync metadata for next session
+            data: { 
+                name: name,
+                force_password_change: false 
+            } 
         });
 
         if (authError) throw authError;
         if (!user) throw new Error("User not found");
 
-        // 2. Update Flag in Database (public.users)
-        await UserRepository.markPasswordChanged(user.id);
-
-        // 3. Sync Name in Database (public.users)
+        // 2. Sync Name in Database (public.users)
+        // Note: We do NOT call markPasswordChanged anymore as the column is missing. 
+        // Metadata update above handles the flag.
         await UserRepository.updateProfile(user.id, { name: name });
 
         Swal.fire({
@@ -51,7 +54,7 @@ const ForcePasswordChange: React.FC<Props> = ({ onSuccess }) => {
             showConfirmButton: false
         });
         
-        // 4. Trigger UI transition (App.tsx will re-render based on updated context)
+        // 3. Trigger UI transition (App.tsx will re-render based on updated context)
         onSuccess();
 
     } catch (err: any) {

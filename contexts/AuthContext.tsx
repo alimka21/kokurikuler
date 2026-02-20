@@ -23,18 +23,37 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     useEffect(() => {
         let mounted = true;
 
+        // --- SAFETY TIMEOUT ---
+        // Force stop loading after 5 seconds to prevent infinite white screen
+        const safetyTimer = setTimeout(() => {
+            if (mounted && isLoading) {
+                console.warn("[Auth] Session check timed out. Forcing app load.");
+                setIsLoading(false);
+            }
+        }, 5000);
+
         // 1. Get Initial Session
         const getInitialSession = async () => {
             try {
-                const { data: { user: authUser } } = await supabase.auth.getUser();
+                // Gunakan getUser() karena lebih aman memverifikasi token ke server
+                const { data: { user: authUser }, error } = await supabase.auth.getUser();
+                
+                if (error) {
+                    // Jika session invalid/expired, biarkan user null dan stop loading
+                    if (mounted) setIsLoading(false);
+                    return;
+                }
+
                 if (authUser && mounted) {
                     await syncUserProfile(authUser);
                 } else {
                     if (mounted) setIsLoading(false);
                 }
             } catch (e) {
-                console.error("Auth Init Error:", e);
+                console.error("[Auth] Init Error:", e);
                 if (mounted) setIsLoading(false);
+            } finally {
+                clearTimeout(safetyTimer); // Clear timeout if successful
             }
         };
 
@@ -55,6 +74,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
         return () => {
             mounted = false;
+            clearTimeout(safetyTimer);
             subscription.unsubscribe();
         };
     }, []);
@@ -63,8 +83,32 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const syncUserProfile = async (authUser: any) => {
         try {
             // Fetch additional profile data from public.users
-            const dbProfile = await UserRepository.getCurrentProfile(authUser.id);
+            let dbProfile = await UserRepository.getCurrentProfile(authUser.id);
             
+            // CRITICAL FIX: If profile doesn't exist in public.users, create it immediately.
+            // This prevents "Foreign Key Constraint" errors when saving projects.
+            if (!dbProfile) {
+                console.log("[Auth] User missing in public table. Syncing now...");
+                const newProfile = {
+                    id: authUser.id,
+                    email: authUser.email,
+                    name: authUser.user_metadata?.name || 'User',
+                    role: authUser.user_metadata?.role || 'user',
+                    is_active: true
+                };
+                
+                // Direct insert via Supabase client to bypass repository restrictive Select
+                const { error: insertError } = await supabase
+                    .from('users')
+                    .upsert(newProfile);
+                
+                if (!insertError) {
+                    dbProfile = newProfile;
+                } else {
+                    console.error("Failed to sync user to public table:", insertError);
+                }
+            }
+
             // GUARD: Check Account Status
             // If is_active is explicitly false, force logout
             if (dbProfile?.is_active === false) {
@@ -84,16 +128,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 tokenManager.setKey(dbProfile.api_key);
                 console.log("[Auth] API Key restored from profile.");
             }
+            
+            const role = authUser.user_metadata?.role || dbProfile?.role || 'user';
+            
+            // LOGIC: Check Metadata for force_password_change
+            // Rule: Admins are exempt from forced password changes
+            const isForceChange = authUser.user_metadata?.force_password_change === true;
+            const finalForceChange = role !== 'admin' && isForceChange;
 
             const mergedUser: User = {
                 id: authUser.id,
                 email: authUser.email || '',
-                role: authUser.user_metadata?.role || dbProfile?.role || 'user',
+                role: role,
                 name: dbProfile?.name || authUser.user_metadata?.name,
-                // school removed
                 apiKey: dbProfile?.api_key, // Add API Key to context
-                // Critical: Prioritize DB flag for password change
-                force_password_change: dbProfile?.force_password_change ?? false, 
+                // Critical: Prioritize Metadata, exempt Admin
+                force_password_change: finalForceChange, 
                 is_active: dbProfile?.is_active ?? true,
                 created_at: authUser.created_at
             };

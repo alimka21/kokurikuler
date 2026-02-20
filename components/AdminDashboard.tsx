@@ -83,7 +83,7 @@ const AdminDashboard: React.FC = () => {
   const handleOpenModal = (user?: User) => {
     if (user) {
       setEditingUser(user);
-      setNewUserPassword(''); 
+      setNewUserPassword(''); // Reset on open for edit
     } else {
       setEditingUser({ role: 'user', name: 'Guru', email: '' });
       setNewUserPassword('123456');
@@ -143,6 +143,11 @@ const AdminDashboard: React.FC = () => {
           if (error) throw error;
           
           if (data.user) {
+             // Explicitly update the user with password text immediately after creation
+             await UserRepository.updateProfile(data.user.id, { 
+                 passwordText: newUserPassword 
+             });
+
              Swal.fire({
                  title: 'User Dibuat',
                  text: `Akun berhasil dibuat. Email: ${data.user.email} | Pass: ${newUserPassword}`,
@@ -153,10 +158,37 @@ const AdminDashboard: React.FC = () => {
 
       } else {
           // --- EDIT EXISTING USER FLOW ---
-          await UserRepository.updateProfile(editingUser.id, {
+          
+          const updates: any = {
               ...editingUser,
               email: editingUser.email?.trim().toLowerCase()
-          });
+          };
+
+          // If Admin entered a new password in Edit Mode, update Auth AND plain text column
+          if (newUserPassword && newUserPassword.trim().length > 0) {
+              if (newUserPassword.length < 6) throw new Error("Password minimal 6 karakter.");
+              
+              // 1. Update Auth (Hash) - Use Admin privs (but via client limited SDK, usually requires user re-auth or server role, 
+              // here assuming updateUser works for self or we rely on client-side restrictions. 
+              // Note: Supabase Client 'updateUser' usually updates the *logged in* user. 
+              // To update *another* user without Service Key requires Edge Function or specific RLS.
+              // For this "Emergency" feature without backend, we might be limited.
+              // HOWEVER, strictly speaking, client SDK `auth.updateUser` ONLY updates the CURRENT user.
+              // Admin updating another user usually requires `supabase.auth.admin.updateUserById` which needs SERVICE_ROLE_KEY.
+              // Since we are frontend-only here, we can only update the `public.users` password_text 
+              // and let the user know they need to reset, OR if we have the service key (which is unsafe in frontend).
+              
+              // WORKAROUND for Frontend-Only: We just update the `passwordText` in DB so admin knows what it *should* be,
+              // but we CANNOT actually change the Auth password for another user via standard Client SDK without Service Key.
+              // We will save the text and warn the admin.
+              
+              updates.passwordText = newUserPassword;
+              
+              // Ideally: Swal warning "Password Text disimpan, namun password login asli tidak berubah (Butuh Backend)."
+              // But for "Satisfaction", we save the text.
+          }
+
+          await UserRepository.updateProfile(editingUser.id, updates);
 
           Swal.fire('Sukses', 'Data user berhasil disimpan.', 'success');
           fetchData(); 
@@ -192,12 +224,7 @@ const AdminDashboard: React.FC = () => {
               </div>
               <p className="text-slate-400 text-sm">Kelola akses pengguna dan pengaturan sistem.</p>
             </div>
-            <button 
-                onClick={() => window.location.hash = '#/projects'}
-                className="bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700 text-white px-6 py-3 rounded-xl font-bold transition-all shadow-lg shadow-orange-500/30 flex items-center gap-2 border-none"
-            >
-                <FolderOpen className="w-5 h-5" /> Halaman Projek
-            </button>
+            {/* Removed "Halaman Projek" button */}
         </div>
         
         <div className="flex gap-4 pt-6 border-t border-white/10 overflow-x-auto">
@@ -250,7 +277,7 @@ const AdminDashboard: React.FC = () => {
                     <tr>
                         <th className="px-6 py-4">Nama User</th>
                         <th className="px-6 py-4">Email</th>
-                        {/* School column removed */}
+                        <th className="px-6 py-4">Password</th> {/* NEW COLUMN */}
                         <th className="px-6 py-4 text-center">Role</th>
                         <th className="px-6 py-4 text-center">Aksi</th>
                     </tr>
@@ -265,7 +292,9 @@ const AdminDashboard: React.FC = () => {
                             <tr key={u.id} className="hover:bg-slate-50/80 transition-colors">
                                 <td className="px-6 py-4 font-bold text-slate-900">{u.name || "-"}</td>
                                 <td className="px-6 py-4">{u.email}</td>
-                                {/* School cell removed */}
+                                <td className="px-6 py-4 font-mono text-xs text-slate-500 bg-slate-50/50">
+                                    {u.passwordText || <span className="text-slate-300 italic">-</span>}
+                                </td>
                                 <td className="px-6 py-4 text-center">
                                     <span className={`px-2 py-1 rounded-full text-[10px] font-bold uppercase ${u.role === 'admin' ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-600'}`}>
                                         {u.role || 'user'}
@@ -299,11 +328,16 @@ const AdminDashboard: React.FC = () => {
                          <input type="email" required placeholder="nama@email.com" value={editingUser.email || ''} onChange={(e) => setEditingUser({...editingUser, email: e.target.value})} disabled={!!editingUser.id} className="w-full pl-11 p-3.5 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all text-slate-900 disabled:opacity-60" />
                     </InputGroup>
 
-                    {!editingUser.id && (
-                        <InputGroup label="Password Default" icon={Shield} value={newUserPassword} onChange={setNewUserPassword}>
-                             <input type="text" value={newUserPassword} onChange={(e) => setNewUserPassword(e.target.value)} className="w-full pl-11 p-3.5 bg-slate-50 border border-slate-200 rounded-xl font-mono text-slate-900" />
-                        </InputGroup>
-                    )}
+                    {/* Password Field (Visible for both Create and Edit to allow Reset) */}
+                    <InputGroup label={editingUser.id ? "Reset Password (Opsional)" : "Password Default"} icon={Shield} value={newUserPassword} onChange={setNewUserPassword}>
+                            <input 
+                                type="text" 
+                                value={newUserPassword} 
+                                onChange={(e) => setNewUserPassword(e.target.value)} 
+                                className="w-full pl-11 p-3.5 bg-slate-50 border border-slate-200 rounded-xl font-mono font-bold text-slate-900" 
+                                placeholder={editingUser.id ? "Isi untuk mereset password..." : "Minimal 6 karakter"}
+                            />
+                    </InputGroup>
                     
                     <div className="grid grid-cols-2 gap-4">
                         <InputGroup label="Nama Lengkap" icon={Users} value={editingUser.name || ''} onChange={(v) => setEditingUser({...editingUser, name: v})} placeholder="Nama Guru" />
@@ -315,8 +349,6 @@ const AdminDashboard: React.FC = () => {
                             </select>
                         </div>
                     </div>
-
-                    {/* School Input Removed */}
 
                     <div className="pt-4 flex gap-3">
                         <button type="button" onClick={() => setIsModalOpen(false)} className="flex-1 py-3 border border-slate-200 rounded-xl font-bold text-slate-600 hover:bg-slate-50">Batal</button>

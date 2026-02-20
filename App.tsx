@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { useAuth } from './contexts/AuthContext';
 import { useProjectStore } from './store/projectStore';
@@ -5,9 +6,9 @@ import { STEPS } from './constants';
 import { NotificationToast, NotificationType } from './components/common/UiKit';
 import Swal from 'sweetalert2';
 import { getAccessToken } from './services/supabaseClient';
+import { generateAndDownloadDocx, generateAnnualProgramDocx } from './utils/docxGenerator';
 
 // View Components
-import Dashboard from './components/Dashboard';
 import MyProjects from './components/MyProjects';
 import Editor from './components/Editor';
 import IdentitySettings from './components/IdentitySettings';
@@ -32,15 +33,12 @@ import StepFinalization from './components/wizard/StepFinalization';
 
 import { ChevronRight, ChevronLeft, Save, WifiOff, RotateCcw } from 'lucide-react';
 
-type ViewMode = 'dashboard' | 'projects' | 'wizard' | 'editor' | 'identity' | 'admin' | 'account' | 'apikey';
+type ViewMode = 'projects' | 'wizard' | 'editor' | 'identity' | 'admin' | 'account' | 'apikey';
 
 const AuthenticatedApp: React.FC = () => {
     const { user, logout, updateUser } = useAuth();
     
     // ZUSTAND HOOKS
-    // We select state granularly to minimize re-renders where possible, 
-    // but App acts as the Main Controller, so it subscribing to 'project' is expected behavior for passing props.
-    // The performance win comes from Sidebar and other leaf components not re-rendering.
     const project = useProjectStore(state => state.project);
     const savedProjects = useProjectStore(state => state.savedProjects);
     const currentStep = useProjectStore(state => state.currentStep);
@@ -56,7 +54,7 @@ const AuthenticatedApp: React.FC = () => {
     }, [user]);
 
     // UI State
-    const [view, setView] = useState<ViewMode>('dashboard');
+    const [view, setView] = useState<ViewMode>('projects');
     const [isSidebarOpen, setSidebarOpen] = useState(false);
     const [isOffline, setIsOffline] = useState(!navigator.onLine);
     const [toast, setToast] = useState<{ show: boolean; msg: string; type: NotificationType }>({ show: false, msg: '', type: 'success' });
@@ -92,11 +90,18 @@ const AuthenticatedApp: React.FC = () => {
         if (!user) return;
         const handleHashChange = () => {
             const hash = window.location.hash.replace(/^#\/?/, '');
+            
+            // Admin Routing
             if (user.role === 'admin') {
                 if (hash === 'admin') { setView('admin'); return; }
-                if (hash === '' || hash === 'dashboard') { window.location.hash = '#/admin'; return; }
+                if (hash === '') { window.location.hash = '#/projects'; return; }
             }
-            if (hash === 'admin' && user.role !== 'admin') { setView('dashboard'); window.location.hash = '#/dashboard'; return; }
+            // Block non-admin from admin route
+            if (hash === 'admin' && user.role !== 'admin') { 
+                setView('projects'); 
+                window.location.hash = '#/projects'; 
+                return; 
+            }
 
             if (hash === 'projects') setView('projects');
             else if (hash === 'wizard') setView('wizard');
@@ -104,11 +109,11 @@ const AuthenticatedApp: React.FC = () => {
             else if (hash === 'settings') setView('identity');
             else if (hash === 'account') setView('account');
             else if (hash === 'apikey') setView('apikey');
-            else if (hash === 'dashboard') setView('dashboard');
             else if (hash === 'admin') setView('admin');
             else {
-                if (user.role === 'admin') window.location.hash = '#/admin';
-                else { setView('dashboard'); if (hash !== 'dashboard') window.location.hash = '#/dashboard'; }
+                // Default fallback
+                 setView('projects'); 
+                 if (hash !== 'projects') window.location.hash = '#/projects';
             }
         };
         handleHashChange();
@@ -119,7 +124,7 @@ const AuthenticatedApp: React.FC = () => {
     useEffect(() => {
         if (!user) return;
         const hash = window.location.hash.replace(/^#\/?/, '');
-        let targetHash = 'dashboard';
+        let targetHash = 'projects';
         if (view === 'admin') targetHash = 'admin';
         else if (view === 'projects') targetHash = 'projects';
         else if (view === 'wizard') targetHash = 'wizard';
@@ -155,7 +160,7 @@ const AuthenticatedApp: React.FC = () => {
         });
         if (result.isConfirmed) {
             await logout();
-            setView('dashboard');
+            setView('projects');
             window.location.hash = '';
         }
     };
@@ -176,21 +181,30 @@ const AuthenticatedApp: React.FC = () => {
         });
     };
 
+    // Helper for downloading
+    const handleExportDocx = async () => {
+        try {
+            await generateAndDownloadDocx(project);
+            Swal.fire({
+                icon: 'success',
+                title: 'Unduhan Dimulai',
+                text: 'Dokumen sedang diproses...',
+                timer: 1500,
+                showConfirmButton: false
+            });
+        } catch (e) {
+            Swal.fire('Error', 'Gagal mengunduh dokumen.', 'error');
+        }
+    };
+
     if (user?.force_password_change) {
         return <ForcePasswordChange onSuccess={() => updateUser({ ...user, force_password_change: false })} />;
     }
 
-    if (view === 'admin' && user?.role === 'admin') {
-        return (
-            <div className="min-h-screen bg-slate-50 font-sans text-slate-900">
-                <AdminDashboard />
-                <button onClick={handleLogout} className="fixed bottom-6 right-6 bg-white text-slate-600 px-4 py-2 rounded-lg shadow-lg border border-slate-200 hover:bg-red-50 hover:text-red-600 font-bold text-xs">Keluar</button>
-            </div>
-        );
-    }
-
+    // Determine Header Title
     let headerTitle = "Overview";
-    if (view === 'editor') headerTitle = "Document Editor";
+    if (view === 'admin') headerTitle = "Admin Panel";
+    else if (view === 'editor') headerTitle = "Document Editor";
     else if (view === 'projects') headerTitle = "Library & Projek";
     else if (view === 'identity') headerTitle = "Pengaturan Data Sekolah";
     else if (view === 'account') headerTitle = "Pengaturan Akun";
@@ -207,7 +221,7 @@ const AuthenticatedApp: React.FC = () => {
             case 6: 
                 const usedByOthers = savedProjects.filter(p => p.targetClass === project.targetClass && p.id !== project.id).reduce((acc, p) => acc + (p.projectJpAllocation || 0), 0);
                 return <StepActivityPlanning totalJp={project.projectJpAllocation} totalAnnualJp={project.totalJpAnnual} usedByOthers={usedByOthers} setTotalJp={(v) => actions.updateProject('projectJpAllocation', v)} activities={project.activities} setActivities={(a) => actions.updateProject('activities', a)} onGenerate={actions.runActivityPlan} isGenerating={loadingAI} />;
-            case 7: return <StepFinalization project={project} isReady={!!project.assessmentPlan} isFinalizing={isFinalizing} themeName={project.selectedTheme} onFinalize={actions.runFinalization} onViewEditor={() => setView('editor')} onDownload={actions.exportDocx} onDownloadAnnual={actions.exportAnnualDocx} onSaveProject={actions.saveProject} onReset={handleReset} />;
+            case 7: return <StepFinalization project={project} isReady={!!project.assessmentPlan} isFinalizing={isFinalizing} themeName={project.selectedTheme} onFinalize={actions.runFinalization} onViewEditor={() => setView('editor')} onDownload={handleExportDocx} onDownloadAnnual={actions.exportAnnualDocx} onSaveProject={actions.saveProject} onReset={handleReset} />;
             default: return null;
         }
     };
@@ -230,7 +244,7 @@ const AuthenticatedApp: React.FC = () => {
             <main className="flex-1 flex flex-col h-screen overflow-hidden relative">
                 <Header title={headerTitle} onToggleSidebar={() => setSidebarOpen(!isSidebarOpen)} />
                 <div className="flex-1 overflow-y-auto scroll-smooth p-6 sm:p-8">
-                    {view === 'dashboard' && <Dashboard onNewProject={handleStartProject} savedProjects={savedProjects} onLoadProject={handleLoadProject} />}
+                    {view === 'admin' && <AdminDashboard />}
                     {view === 'projects' && (
                         <MyProjects 
                             onNewProject={handleStartProject} savedProjects={savedProjects} onLoadProject={handleLoadProject} 

@@ -90,7 +90,7 @@ const StepGoals: React.FC<Props> = ({ goals, setGoals, onGenerate, isGenerating,
                                     onChange={(e) => updateGoal(goal.id, 'description', e.target.value)}
                                     className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:border-primary focus:ring-2 focus:ring-primary/20 text-slate-900 resize-none font-medium"
                                     rows={2}
-                                    placeholder="Peserta didik mampu..."
+                                    placeholder="Murid mampu..."
                                 />
                             </div>
 

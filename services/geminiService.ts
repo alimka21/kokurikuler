@@ -70,6 +70,7 @@ ATURAN STRICT (SELF-CORRECTION):
 2. Pastikan format JSON valid (tanpa trailing comma).
 3. HANYA berikan output JSON murni jika diminta, jangan ada teks pembuka/penutup.
 4. Pastikan logika konsisten (misal: Total JP aktivitas = Total Alokasi).
+5. GUNAKAN ISTILAH "MURID", JANGAN GUNAKAN "SISWA" ATAU "PESERTA DIDIK".
 `;
 
 // --- CORE: SELF-CORRECTION UTILITIES ---
@@ -225,7 +226,8 @@ export const analyzeSchoolContext = async (text: string): Promise<string> => {
   const prompt = `Data Refleksi Sekolah: ${text}
   Tugas: Lakukan analisis mendalam "Insight Strategis".
   Metode: Core Idea -> Clustering -> Abstraction -> Synthesis.
-  Output: 2-3 paragraf naratif kohesif. TANPA simbol asterisk (*), TANPA bullet points.`;
+  Output: 2-3 paragraf naratif kohesif. TANPA simbol asterisk (*), TANPA bullet points.
+  Pastikan menggunakan istilah "Murid" (bukan Siswa/Peserta Didik).`;
 
   const result = await generateWithRetry<string>(
       "Context Analysis",
@@ -315,13 +317,14 @@ export const generateCreativeIdeas = async (theme: string, format: string, analy
     Tugas: Rumuskan 3 Ide Judul Projek Kokurikuler yang KONTEKSTUAL, RELEVAN, dan JELAS.
     
     Prinsip Utama:
-    1. Judul harus menggambarkan aktivitas yang cocok dengan konteks siswa/sekolah.
+    1. Judul harus menggambarkan aktivitas yang cocok dengan konteks murid/sekolah.
     2. Singkatan/Akronim BOLEH digunakan jika bermakna.
     3. Fokus pada kualitas ide dan relevansi.
     
     Aturan Deskripsi ("description"):
     Deskripsi harus berupa 1 paragraf naratif yang mencakup alur:
     Masalah/Latar Belakang -> Aktivitas Murid (Fokus Pembiasaan jika 7 KAIH) -> Output (Produk/Karakter).
+    Gunakan kata "Murid", jangan "Siswa".
 
     Output JSON: [{ "title": "Judul Projek", "description": "Narasi sesuai aturan alur di atas..." }]
     `;
@@ -340,7 +343,7 @@ export const generateCreativeIdeas = async (theme: string, format: string, analy
     return result || [];
 };
 
-export const draftProjectGoals = async (theme: string, dimensions: Dimension[], format: string, phase: string): Promise<ProjectGoal[]> => {
+export const draftProjectGoals = async (theme: string, dimensions: Dimension[], format: string, phase: string, projectTitle: string, projectDesc: string): Promise<ProjectGoal[]> => {
     const allowedSubjects = SUBJECTS_BY_PHASE[phase] || DEFAULT_SUBJECTS;
     
     let specificInstruction = "";
@@ -356,22 +359,33 @@ export const draftProjectGoals = async (theme: string, dimensions: Dimension[], 
         4. Di akhir deskripsi tujuan, tuliskan nama mapel dalam kurung. Contoh: "... (mata pelajaran IPA)".
         `;
     } else if (format.toLowerCase().includes("7 kaih") || format.toLowerCase().includes("kebiasaan")) {
-        // CASE B: 7 KAIH (NEW LOGIC)
+        // CASE B: 7 KAIH (UPDATED RULE: NO SUBJECTS)
         specificInstruction = `
         MODUS: GERAKAN 7 KAIH (PEMBIASAAN)
         Daftar Referensi Kebiasaan: [Bangun pagi, Beribadah, Berolahraga, Makan sehat dan bergizi, Gemar belajar, Bermasyarakat, Tidur cepat].
         
         Aturan Penulisan Tujuan:
-        1. Tujuan harus fokus pada "PEMBIASAAN" (Habituation), bukan sekadar pengetahuan.
-        2. Pilih 1 atau 2 kebiasaan dari daftar di atas yang relevan dengan Tema "${theme}".
-        3. Rumusan tujuan mencakup: Membangun kesepakatan, Melaksanakan pembiasaan (di sekolah & rumah), dan Refleksi diri.
-        4. "subjects" diisi dengan mata pelajaran yang relevan dengan kebiasaan tersebut (Misal: PJOK untuk Olahraga/Tidur Cepat, Agama untuk Beribadah, PKN/IPS untuk Bermasyarakat).
-        5. Contoh deskripsi: "Membiasakan pola hidup sehat melalui rutinitas bangun pagi dan berolahraga secara konsisten."
+        1. Fokuskan tujuan pada Ide Projek: "${projectTitle}".
+        2. Buat minimal 2 tujuan: 
+           - Tujuan 1: PEMAHAMAN (memahami manfaat/nilai dari kebiasaan).
+           - Tujuan 2: PEMBIASAAN (melakukan rutinitas secara konsisten).
+        3. Array "subjects" WAJIB KOSONG []. JANGAN hubungkan dengan mata pelajaran apapun. Gerakan ini fokus pada karakter dan budaya sekolah.
+        4. Deskripsi tujuan tidak boleh menyebut nama mata pelajaran.
+        `;
+    } else if (format.toLowerCase().includes("cara lainnya") || format.toLowerCase().includes("budaya")) {
+        // CASE C: CARA LAINNYA (UPDATED RULE: NO SUBJECTS)
+         specificInstruction = `
+        MODUS: CARA LAINNYA / BUDAYA SEKOLAH
+        Aturan Penulisan Tujuan:
+        1. Fokus pada Ide Projek: "${projectTitle}".
+        2. Tujuan berkaitan dengan visi misi sekolah atau kekhasan budaya lokal.
+        3. Array "subjects" WAJIB KOSONG []. JANGAN hubungkan dengan mata pelajaran apapun.
+        4. Deskripsi tujuan tidak boleh menyebut nama mata pelajaran.
         `;
     } else {
-        // CASE C: LAINNYA
+        // CASE D: DEFAULT (Kewirausahaan dll)
         specificInstruction = `
-        MODUS: PROJEK UMUM / KEWIRAUSAHAAN
+        MODUS: PROJEK UMUM
         Aturan Penulisan "description":
         1. Tujuan harus berupa pembiasaan, rutinitas, atau pemahaman manfaat.
         2. JANGAN menuliskan nama mata pelajaran di dalam teks deskripsi. Teks harus bersih.
@@ -380,15 +394,20 @@ export const draftProjectGoals = async (theme: string, dimensions: Dimension[], 
     }
 
     const prompt = `
-    Tema: "${theme}". Dimensi: ${dimensions.join(', ')}. Format: "${format}".
+    Tema: "${theme}". 
+    Dimensi: ${dimensions.join(', ')}. 
+    Format: "${format}".
+    Judul Projek Kreatif: "${projectTitle}".
+    Konsep Projek: "${projectDesc}".
     Fase/Jenjang: "${phase}".
     
-    DAFTAR MATA PELAJARAN YANG TERSEDIA DI FASE INI (PILIH DARI SINI SAJA UNTUK ARRAY SUBJECTS):
+    DAFTAR MATA PELAJARAN (Hanya gunakan jika modus mengizinkan integrasi mapel):
     ${allowedSubjects.join(', ')}
 
     ${specificInstruction}
 
-    Tugas: Rumuskan 3-4 Tujuan Projek.
+    Tugas: Rumuskan 3-4 Tujuan Projek yang spesifik untuk judul "${projectTitle}".
+    Gunakan kata "Murid", jangan "Siswa" atau "Peserta Didik".
     
     Output JSON: [{ "id": "1", "description": "Isi sesuai aturan modus di atas...", "subjects": ["Nama Mapel"] }]
     `;
@@ -400,10 +419,14 @@ export const draftProjectGoals = async (theme: string, dimensions: Dimension[], 
             if (!Array.isArray(data)) return { isValid: false, error: "Output bukan Array" };
             if (data.length === 0) return { isValid: false, error: "Data kosong" };
             
-            // Validasi tambahan untuk Kolaborasi: Pastikan subjects.length === 1
+            // Validasi tambahan
             if (format.toLowerCase().includes("kolabora")) {
                 const invalid = data.find((g: any) => !g.subjects || g.subjects.length !== 1);
                 if (invalid) return { isValid: false, error: "Mode Kolaborasi: Setiap tujuan wajib memiliki tepat 1 mata pelajaran di array subjects." };
+            }
+            if (format.toLowerCase().includes("7 kaih") || format.toLowerCase().includes("cara lainnya")) {
+                 const invalid = data.find((g: any) => g.subjects && g.subjects.length > 0);
+                 if (invalid) return { isValid: false, error: "Mode 7 KAIH / Cara Lainnya TIDAK BOLEH memiliki mata pelajaran (subjects harus kosong)." };
             }
 
             return { isValid: true };
@@ -414,27 +437,33 @@ export const draftProjectGoals = async (theme: string, dimensions: Dimension[], 
     return result || [];
 };
 
-export const generateActivityPlan = async (totalJp: number, theme: string, goals: ProjectGoal[], format: string): Promise<Activity[]> => {
+export const generateActivityPlan = async (totalJp: number, theme: string, goals: ProjectGoal[], format: string, projectTitle: string): Promise<Activity[]> => {
     const goalsText = goals.map(g => `- ${g.description}`).join('\n');
     
     let specificGuide = "";
     if (format.toLowerCase().includes("7 kaih") || format.toLowerCase().includes("kebiasaan")) {
         specificGuide = `
         STRUKTUR KHUSUS GERAKAN 7 KAIH (WAJIB DIIKUTI):
+        Judul Projek: ${projectTitle}
+        
         Buat alur aktivitas dengan tahapan berikut (sesuaikan jumlah JP agar total pas ${totalJp} JP):
-        1. MEMBANGUN KESEPAKATAN (Introduction): Guru & siswa menyepakati kebiasaan (misal: kontrak belajar, jadwal tidur/bangun, atau jadwal olahraga).
-        2. EKSPLORASI STRATEGI: Siswa mencari cara/strategi untuk menjalankan kebiasaan tersebut.
-        3. PELAKSANAAN & JURNAL (Execution): Siswa mempraktikkan kebiasaan (di sekolah/rumah) dan mengisi Jurnal Harian. (Ini adalah inti, alokasikan JP terbanyak di sini atau buat beberapa pertemuan).
+        1. MEMBANGUN KESEPAKATAN (Introduction): Guru & murid menyepakati kebiasaan.
+        2. EKSPLORASI STRATEGI: Murid mencari cara/strategi untuk menjalankan kebiasaan.
+        3. PELAKSANAAN & JURNAL (Execution): Murid mempraktikkan kebiasaan (di sekolah/rumah) dan mengisi Jurnal Harian. (Ini adalah inti, alokasikan JP terbanyak).
         4. REFLEKSI & EVALUASI: Membahas tantangan dalam pelaksanaan dan mencari solusi.
-        5. PRESENTASI/SHARING: Membagikan pengalaman perubahan yang dirasakan (tubuh lebih bugar, pikiran segar, dll).
+        5. PRESENTASI/SHARING: Membagikan pengalaman perubahan yang dirasakan.
         `;
     } else {
-        specificGuide = "Buat alur aktivitas yang logis: Pengenalan -> Kontekstualisasi -> Aksi -> Refleksi -> Tindak Lanjut.";
+        specificGuide = `
+        Judul Projek: ${projectTitle}
+        Buat alur aktivitas yang logis untuk merealisasikan judul tersebut: Pengenalan -> Kontekstualisasi -> Aksi -> Refleksi -> Tindak Lanjut.
+        `;
     }
 
     const prompt = `
     Peran: Ahli Kurikulum.
-    Tugas: Susun "Alur Aktivitas Kokurikuler".
+    Tugas: Susun "Alur Aktivitas Kokurikuler" untuk projek "${projectTitle}".
+    Gunakan kata "Murid", jangan "Siswa".
     
     CONSTRAINT (PENTING):
     1. Total JP Aktivitas WAJIB sama persis dengan ${totalJp} JP.
@@ -448,29 +477,54 @@ export const generateActivityPlan = async (totalJp: number, theme: string, goals
     Output JSON Array: [{ "id": "1", "name": "Nama Aktivitas (Singkat & Jelas)", "type": "Tipe (misal: Diskusi/Praktik)", "jp": 0, "description": "Penjelasan singkat tentang apa yang dilakukan..." }]
     `;
 
+    // OPTIMIZED STRATEGY: 
+    // Do NOT fail validation on math error. Accept the data, then fix math client-side.
     const result = await generateWithRetry<Activity[]>(
         "Activity Plan",
         prompt,
         (data) => {
             if (!Array.isArray(data)) return { isValid: false, error: "Output bukan Array" };
             if (data.length === 0) return { isValid: false, error: "Data kosong" };
-            
-            // MATH VALIDATION
-            const sum = data.reduce((acc: number, curr: any) => acc + (parseInt(curr.jp) || 0), 0);
-            const diff = Math.abs(sum - totalJp);
-            
-            if (diff > 0) {
-                return { 
-                    isValid: false, 
-                    error: `Matematika Salah! Total JP aktivitas kamu adalah ${sum}, padahal target alokasi adalah ${totalJp}. Selisih ${diff} JP. Revisi durasi kegiatan agar pas.` 
-                };
-            }
-            
             return { isValid: true };
         },
         { responseMimeType: "application/json" },
-        3 // Max 3 retries for Math
+        1 
     );
+
+    // --- CLIENT-SIDE MATH CORRECTION ---
+    if (result && result.length > 0) {
+        let currentSum = result.reduce((acc, curr) => acc + (parseInt(curr.jp as any) || 0), 0);
+        let diff = totalJp - currentSum;
+
+        if (diff !== 0) {
+            console.log(`[AI-Agent] Math mismatch by ${diff} JP. Auto-correcting...`);
+            
+            // Correction Strategy:
+            let maxJpIndex = 0;
+            let maxJpVal = -1;
+            
+            result.forEach((act, idx) => {
+                const val = parseInt(act.jp as any) || 0;
+                if (val > maxJpVal) {
+                    maxJpVal = val;
+                    maxJpIndex = idx;
+                }
+            });
+
+            const targetAct = result[maxJpIndex];
+            const newVal = (parseInt(targetAct.jp as any) || 0) + diff;
+
+            // Safety check: Don't let it go below 1
+            if (newVal >= 1) {
+                targetAct.jp = newVal;
+            } else {
+                // Edge case: simple fallback
+                const last = result[result.length - 1];
+                last.jp = (parseInt(last.jp as any) || 0) + diff;
+                if (last.jp < 1) last.jp = 1; 
+            }
+        }
+    }
 
     return result || [];
 };
@@ -488,11 +542,21 @@ export const generateHiddenSections = async (project: ProjectState): Promise<Par
     Format: ${project.activityFormat}
     Konsep Dasar (Deskripsi): ${project.projectDescription || "-"}
     
-    Daftar Aktivitas Awal:
+    Daftar Aktivitas Awal & Alokasi Waktu:
     ${activityContext}
 
     Tugas 1: Lengkapi dokumen kokurikuler dengan narasi akademik.
-    Tugas 2: UNTUK SETIAP AKTIVITAS di atas, buatkan MICRO STEPS (Langkah-langkah mikro/detail) yang sangat operasional (5-10 poin per aktivitas).
+    Tugas 2: UNTUK SETIAP AKTIVITAS di atas, buatkan MICRO STEPS (Langkah-langkah mikro/detail) yang sangat operasional.
+    
+    GUNAKAN KATA "MURID" (JANGAN SISWA/PESERTA DIDIK).
+
+    ATURAN KRUSIAL - SKALA MIKRO LANGKAH BERDASARKAN JP:
+    Anda harus memperhatikan jumlah JP (Jam Pelajaran) saat merinci langkah. 1 JP = 40 menit.
+    1. Durasi Pendek (1-3 JP): Buat 3-5 langkah taktis. Fokus pada instruksi, pelaksanaan cepat, dan refleksi singkat.
+    2. Durasi Sedang (4-6 JP): Buat 5-8 langkah. Harus mencakup: Pengantar, Eksplorasi/Riset, Kerja Kelompok/Mandiri yang cukup lama, dan Presentasi/Umpan Balik.
+    3. Durasi Panjang (7+ JP): Buat 8-15 langkah mendalam. Ini waktu yang sangat lama. Langkah harus menggambarkan proses yang berulang atau mendalam (misal: "Sesi 1: Perencanaan...", "Sesi 2: Pengerjaan Tahap 1...", "Sesi 3: Finalisasi..."). Jangan buat langkah yang terlalu sederhana untuk durasi ini.
+
+    Gaya Bahasa: Akademik, Operasional (Menggunakan kata kerja aktif: Menganalisis, Merancang, Mendemonstrasikan).
     
     ${is7Kaih ? `
     KHUSUS 7 KAIH:
@@ -518,7 +582,7 @@ export const generateHiddenSections = async (project: ProjectState): Promise<Par
       "activities": [
          {
            "id": "ID_SAMA", 
-           "steps": ["1. Guru...", "2. Siswa..."]
+           "steps": ["1. Guru...", "2. Murid..."]
          }
       ],
       "assessmentRubrics": [
