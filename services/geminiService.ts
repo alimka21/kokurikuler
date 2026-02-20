@@ -538,7 +538,7 @@ export const generateHiddenSections = async (project: ProjectState): Promise<Par
     const prompt = `
     Data Projek: ${project.title}
     Tema: ${project.selectedTheme}
-    Dimensi: ${project.selectedDimensions.join(', ')}
+    Dimensi Terpilih (WAJIB): ${project.selectedDimensions.join(', ')}
     Format: ${project.activityFormat}
     Konsep Dasar (Deskripsi): ${project.projectDescription || "-"}
     
@@ -556,12 +556,11 @@ export const generateHiddenSections = async (project: ProjectState): Promise<Par
     2. Durasi Sedang (4-6 JP): Buat 5-8 langkah. Harus mencakup: Pengantar, Eksplorasi/Riset, Kerja Kelompok/Mandiri yang cukup lama, dan Presentasi/Umpan Balik.
     3. Durasi Panjang (7+ JP): Buat 8-15 langkah mendalam. Ini waktu yang sangat lama. Langkah harus menggambarkan proses yang berulang atau mendalam (misal: "Sesi 1: Perencanaan...", "Sesi 2: Pengerjaan Tahap 1...", "Sesi 3: Finalisasi..."). Jangan buat langkah yang terlalu sederhana untuk durasi ini.
 
-    Gaya Bahasa: Akademik, Operasional (Menggunakan kata kerja aktif: Menganalisis, Merancang, Mendemonstrasikan).
-    
     ${is7Kaih ? `
     KHUSUS 7 KAIH:
     - Micro Steps untuk aktivitas "Pelaksanaan/Jurnal" harus mencakup: kerjasama dengan orang tua, pengisian checklist harian, dan monitoring guru.
-    - Assessment Rubric harus menilai "Konsistensi Pembiasaan" (misal: Frekuensi bangun pagi/olahraga).
+    - Assessment Rubric (assessmentRubrics) harus menilai "Konsistensi Pembiasaan".
+    - ATURAN DIMENSI RUBRIK: HANYA buat rubrik untuk dimensi yang ada dalam daftar "Dimensi Terpilih (WAJIB)" di atas. JANGAN tambahkan dimensi lain (misal: jangan tambah Gotong Royong jika tidak dipilih). Sesuaikan aspek penilaian dengan dimensi yang tersedia saja.
     ` : ''}
 
     PERMINTAAN FORMAT ISI (WAJIB DIIKUTI):
@@ -587,7 +586,7 @@ export const generateHiddenSections = async (project: ProjectState): Promise<Par
       ],
       "assessmentRubrics": [
          {
-           "dimensionName": "Nama Dimensi",
+           "dimensionName": "Nama Dimensi (Harus salah satu dari dimensi terpilih)",
            "rubrics": [
              { "aspect": "...", "score1": "...", "score2": "...", "score3": "...", "score4": "..." }
            ]

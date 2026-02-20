@@ -180,7 +180,7 @@ const AuthorizedView: React.FC = () => {
         });
     };
 
-    // Helper for downloading single doc
+    // Helper for downloading
     const handleExportDocx = async () => {
         try {
             await generateAndDownloadDocx(project);
@@ -188,25 +188,6 @@ const AuthorizedView: React.FC = () => {
                 icon: 'success',
                 title: 'Unduhan Dimulai',
                 text: 'Dokumen sedang diproses...',
-                timer: 1500,
-                showConfirmButton: false
-            });
-        } catch (e) {
-            Swal.fire('Error', 'Gagal mengunduh dokumen.', 'error');
-        }
-    };
-
-    // Helper for downloading annual program (aggregates class data)
-    const handleExportAnnualDocx = async () => {
-        try {
-            const relatedProjects = savedProjects.filter(p => p.targetClass === project.targetClass && p.id !== project.id);
-            const allProjects = [...relatedProjects, project];
-            
-            await generateAnnualProgramDocx(project, allProjects);
-            Swal.fire({
-                icon: 'success',
-                title: 'Unduhan Dimulai',
-                text: 'Program Tahunan sedang diproses...',
                 timer: 1500,
                 showConfirmButton: false
             });
@@ -239,7 +220,7 @@ const AuthorizedView: React.FC = () => {
             case 6: 
                 const usedByOthers = savedProjects.filter(p => p.targetClass === project.targetClass && p.id !== project.id).reduce((acc, p) => acc + (p.projectJpAllocation || 0), 0);
                 return <StepActivityPlanning totalJp={project.projectJpAllocation} totalAnnualJp={project.totalJpAnnual} usedByOthers={usedByOthers} setTotalJp={(v) => actions.updateProject('projectJpAllocation', v)} activities={project.activities} setActivities={(a) => actions.updateProject('activities', a)} onGenerate={actions.runActivityPlan} isGenerating={loadingAI} />;
-            case 7: return <StepFinalization project={project} isReady={!!project.assessmentPlan} isFinalizing={isFinalizing} themeName={project.selectedTheme} onFinalize={actions.runFinalization} onViewEditor={() => setView('editor')} onDownload={handleExportDocx} onDownloadAnnual={handleExportAnnualDocx} onSaveProject={actions.saveProject} onReset={handleReset} />;
+            case 7: return <StepFinalization project={project} isReady={!!project.assessmentPlan} isFinalizing={isFinalizing} themeName={project.selectedTheme} onFinalize={actions.runFinalization} onViewEditor={() => setView('editor')} onDownload={handleExportDocx} onDownloadAnnual={actions.exportAnnualDocx} onSaveProject={actions.saveProject} onReset={handleReset} />;
             default: return null;
         }
     };

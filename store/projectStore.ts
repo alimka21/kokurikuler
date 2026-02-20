@@ -235,10 +235,6 @@ export const useProjectStore = create<ProjectStoreState>()(
                         set((state) => {
                             state.savedProjects = state.savedProjects.filter(p => p.id !== id);
                             if (state.project.id === id) {
-                                // Reset if deleted active project
-                                // Note: calling actions inside setter needs get() or careful structure. 
-                                // Simplified for Immer: we can just mutate.
-                                // Actually, better to call createNewProject logic or reset manually.
                                 Object.assign(state.project, { ...INITIAL_PROJECT_STATE, id: crypto.randomUUID() });
                                 state.currentStep = 0;
                             }
@@ -293,6 +289,7 @@ export const useProjectStore = create<ProjectStoreState>()(
                         selectedDimensions: reference.selectedDimensions,
                         lastStep: 3
                     };
+                    // Smart Skip: Go directly to Step 3 (Theme & Format) because Analysis (1) and Dimensions (2) are reused
                     set({ project: newP, currentStep: 3 });
                 },
 
@@ -337,10 +334,13 @@ export const useProjectStore = create<ProjectStoreState>()(
                     const { currentStep, project } = get();
                     if (stepIndex > currentStep) {
                         if (stepIndex > currentStep + 1) {
-                            Swal.fire({ icon: 'error', title: 'Akses Ditolak', text: '⚠️ Anda tidak bisa melompati tahapan.', confirmButtonColor: '#2563EB' });
-                            return;
+                           // Allow skipping logic if detected by Smart Skip feature in view components
+                           // For manual click, we block skipping.
+                           // checkPrerequisites handles alerts.
+                           if (!checkPrerequisites(project, currentStep, 'next')) return;
+                        } else {
+                           if (!checkPrerequisites(project, currentStep, 'next')) return;
                         }
-                        if (!checkPrerequisites(project, currentStep, 'next')) return;
                     }
                     set({ currentStep: stepIndex });
                     // Handle auto-trigger if jumping to step 2

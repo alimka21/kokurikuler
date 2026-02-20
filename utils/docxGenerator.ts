@@ -169,7 +169,7 @@ export const generateAndDownloadDocx = async (project: ProjectState) => {
     // 5. Full Description (Simplified: NO Context Analysis)
     const fullDescription = project.projectDescription || "Belum ada deskripsi.";
 
-    // 6. Activities List (Formatted like PDF: A. Title (JP) -> 1. Steps...)
+    // 6. Activities List (Formatted like PDF: A. Title (JP) -> Description -> 1. Steps...)
     const activityParagraphs: Paragraph[] = [];
     
     project.activities.forEach((act, i) => {
@@ -180,7 +180,16 @@ export const generateAndDownloadDocx = async (project: ProjectState) => {
             spacing: { before: 240, after: 120 }
         }));
         
-        // Detailed Steps (Numbered List)
+        // B. General Description (Gambaran Umum)
+        if (act.description) {
+            activityParagraphs.push(new Paragraph({
+                children: [new TextRun({ text: act.description, font: "Times New Roman", size: 24, italics: true })],
+                indent: { left: 360 }, // Indent to align with text above
+                spacing: { after: 120 }
+            }));
+        }
+
+        // C. Detailed Steps (Numbered List)
         if (act.steps && act.steps.length > 0) {
             act.steps.forEach((step, stepIdx) => {
                 // Remove existing numbering if AI included it (e.g., "1. Guru...")
@@ -195,7 +204,7 @@ export const generateAndDownloadDocx = async (project: ProjectState) => {
         } else {
             // Fallback if steps not generated yet or empty
             activityParagraphs.push(new Paragraph({
-                children: [new TextRun({ text: act.description || "Belum ada rincian.", font: "Times New Roman", size: 24 })],
+                children: [new TextRun({ text: "Belum ada rincian.", font: "Times New Roman", size: 24 })],
                 indent: { left: 360 }, 
                 spacing: { after: 120 }
             }));
@@ -270,7 +279,6 @@ export const generateAndDownloadDocx = async (project: ProjectState) => {
             },
             children: [
                 // TITLE (18pt = 36 half-points, Bold, Black)
-                // REMOVED 'heading' property to force manual styling. Strict TextRun.
                 new Paragraph({
                     children: [
                         new TextRun({ 
@@ -490,8 +498,8 @@ export const generateAnnualProgramDocx = async (primaryProject: ProjectState, re
                 page: {
                     size: {
                         orientation: PageOrientation.LANDSCAPE,
-                        width: 16838, // A4 Landscape
-                        height: 11906, // A4 Landscape
+                        width: 16838, // A4 Landscape Width (29.7cm)
+                        height: 11906, // A4 Landscape Height (21cm)
                     },
                     margin: { top: 720, right: 720, bottom: 720, left: 720 }
                 }

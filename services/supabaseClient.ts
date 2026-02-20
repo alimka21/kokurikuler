@@ -20,8 +20,9 @@ const getEnv = (key: string) => {
 const FALLBACK_URL = 'https://ndawqyzvvyzqtqyxchjl.supabase.co';
 const FALLBACK_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5kYXdxeXp2dnl6cXRxeXhjaGpsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzEyMjgxNzIsImV4cCI6MjA4NjgwNDE3Mn0.GWF1r6GPORrooNRVDkWrRDeGmowTHCod8NF3HFUMc5M';
 
-const supabaseUrl = getEnv('VITE_SUPABASE_URL') || FALLBACK_URL;
-const supabaseAnonKey = getEnv('VITE_SUPABASE_ANON_KEY') || FALLBACK_KEY;
+// EXPORT THESE CONSTANTS
+export const supabaseUrl = getEnv('VITE_SUPABASE_URL') || FALLBACK_URL;
+export const supabaseAnonKey = getEnv('VITE_SUPABASE_ANON_KEY') || FALLBACK_KEY;
 
 export const isSupabaseConfigured = !!(supabaseUrl && supabaseAnonKey);
 

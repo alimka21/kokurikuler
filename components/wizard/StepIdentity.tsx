@@ -8,6 +8,7 @@ import Swal from 'sweetalert2';
 interface Props {
     project: ProjectState;
     onChange: (f: keyof ProjectState, v: any) => void;
+    onSmartSkip: () => void; // New callback for skipping steps
 }
 
 interface EnhancedProps extends Props {
@@ -38,7 +39,7 @@ const JP_MAPPING: Record<string, number> = {
     "Kelas 12": 128,
 };
 
-const StepIdentity: React.FC<EnhancedProps> = ({ project, onChange, savedProjects = [] }) => {
+const StepIdentity: React.FC<EnhancedProps> = ({ project, onChange, savedProjects = [], onSmartSkip }) => {
     
     const currentPhase = PHASES.find(p => p.value === project.phase) || PHASES[3];
 
@@ -54,17 +55,32 @@ const StepIdentity: React.FC<EnhancedProps> = ({ project, onChange, savedProject
         if (existing) {
             Swal.fire({
                 title: 'Data Ditemukan!',
-                text: `Kami menemukan analisis konteks dari projek ${existing.selectedTheme} di kelas ${newClass}. Apakah Anda ingin menggunakannya kembali?`,
+                text: `Kami menemukan analisis konteks dari projek ${existing.selectedTheme} di kelas ${newClass}. Gunakan data ini untuk menghemat waktu?`,
                 icon: 'question',
                 showCancelButton: true,
-                confirmButtonText: 'Ya, Gunakan (Hemat Waktu)',
+                confirmButtonText: 'Ya, Gunakan & Lanjut Tema',
                 cancelButtonText: 'Tidak, Buat Baru',
                 confirmButtonColor: '#558B6E'
             }).then((result) => {
                 if (result.isConfirmed) {
+                    // Load reusable data
                     onChange('contextAnalysis', existing.contextAnalysis);
                     onChange('analysisSummary', existing.analysisSummary);
-                    Swal.fire('Berhasil', 'Analisis konteks telah disalin.', 'success');
+                    onChange('recommendedDimensions', existing.recommendedDimensions);
+                    onChange('selectedDimensions', existing.selectedDimensions);
+                    
+                    Swal.fire({
+                        icon: 'success',
+                        title: 'Data Disalin',
+                        text: 'Melompat ke tahap Tema karena Analisis & Dimensi sudah terisi.',
+                        timer: 1500,
+                        showConfirmButton: false
+                    });
+                    
+                    // SMART SKIP: Trigger navigation to Step 3 (Theme)
+                    setTimeout(() => {
+                        onSmartSkip();
+                    }, 500);
                 }
             });
         }

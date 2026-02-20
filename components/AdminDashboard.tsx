@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { supabase } from '../services/supabaseClient';
+import { supabase, supabaseUrl, supabaseAnonKey } from '../services/supabaseClient'; // Import valid credentials
 import { createClient } from '@supabase/supabase-js'; 
 import { User } from '../types';
 import { UserRepository, SettingsRepository } from '../services/repository';
@@ -91,15 +91,6 @@ const AdminDashboard: React.FC = () => {
     setIsModalOpen(true);
   };
 
-  // Helper to safely get env vars locally for the temp client
-  const getEnv = (key: string) => {
-      // @ts-ignore
-      if (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env[key]) return import.meta.env[key];
-      // @ts-ignore
-      if (typeof process !== 'undefined' && process.env && process.env[key]) return process.env[key];
-      return '';
-  };
-
   const handleSaveUser = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingUser.email || !editingUser.name) {
@@ -112,12 +103,10 @@ const AdminDashboard: React.FC = () => {
       if (!editingUser.id) {
           // --- CREATE NEW USER FLOW ---
           // Use isolated client to avoid logging out the admin
-          const envUrl = getEnv('VITE_SUPABASE_URL');
-          const envKey = getEnv('VITE_SUPABASE_ANON_KEY');
-          
-          if (!envUrl || !envKey) throw new Error("Supabase credentials missing");
+          // Use exported constants to guarantee validity
+          if (!supabaseUrl || !supabaseAnonKey) throw new Error("Supabase credentials missing");
 
-          const tempSupabase = createClient(envUrl, envKey, {
+          const tempSupabase = createClient(supabaseUrl, supabaseAnonKey, {
               auth: {
                   autoRefreshToken: false,
                   persistSession: false,
@@ -126,16 +115,14 @@ const AdminDashboard: React.FC = () => {
           });
 
           // Metadata automatically passes to Trigger 'on_auth_user_created'
-          // which inserts into public.users
           const { data, error } = await tempSupabase.auth.signUp({
             email: editingUser.email.trim(),
             password: newUserPassword,
             options: {
                 data: {
                     name: editingUser.name,
-                    // school removed from metadata
                     role: editingUser.role,
-                    force_password_change: true 
+                    force_password_change: true // CRITICAL: Force password change on first login
                 }
             }
           });
@@ -164,28 +151,9 @@ const AdminDashboard: React.FC = () => {
               email: editingUser.email?.trim().toLowerCase()
           };
 
-          // If Admin entered a new password in Edit Mode, update Auth AND plain text column
           if (newUserPassword && newUserPassword.trim().length > 0) {
               if (newUserPassword.length < 6) throw new Error("Password minimal 6 karakter.");
-              
-              // 1. Update Auth (Hash) - Use Admin privs (but via client limited SDK, usually requires user re-auth or server role, 
-              // here assuming updateUser works for self or we rely on client-side restrictions. 
-              // Note: Supabase Client 'updateUser' usually updates the *logged in* user. 
-              // To update *another* user without Service Key requires Edge Function or specific RLS.
-              // For this "Emergency" feature without backend, we might be limited.
-              // HOWEVER, strictly speaking, client SDK `auth.updateUser` ONLY updates the CURRENT user.
-              // Admin updating another user usually requires `supabase.auth.admin.updateUserById` which needs SERVICE_ROLE_KEY.
-              // Since we are frontend-only here, we can only update the `public.users` password_text 
-              // and let the user know they need to reset, OR if we have the service key (which is unsafe in frontend).
-              
-              // WORKAROUND for Frontend-Only: We just update the `passwordText` in DB so admin knows what it *should* be,
-              // but we CANNOT actually change the Auth password for another user via standard Client SDK without Service Key.
-              // We will save the text and warn the admin.
-              
               updates.passwordText = newUserPassword;
-              
-              // Ideally: Swal warning "Password Text disimpan, namun password login asli tidak berubah (Butuh Backend)."
-              // But for "Satisfaction", we save the text.
           }
 
           await UserRepository.updateProfile(editingUser.id, updates);
@@ -206,7 +174,6 @@ const AdminDashboard: React.FC = () => {
   const filteredUsers = users.filter(u => 
     (u.name && u.name.toLowerCase().includes(searchTerm.toLowerCase())) || 
     (u.email && u.email.toLowerCase().includes(searchTerm.toLowerCase()))
-    // Removed school filter
   );
 
   return (
@@ -224,7 +191,6 @@ const AdminDashboard: React.FC = () => {
               </div>
               <p className="text-slate-400 text-sm">Kelola akses pengguna dan pengaturan sistem.</p>
             </div>
-            {/* Removed "Halaman Projek" button */}
         </div>
         
         <div className="flex gap-4 pt-6 border-t border-white/10 overflow-x-auto">
@@ -277,7 +243,7 @@ const AdminDashboard: React.FC = () => {
                     <tr>
                         <th className="px-6 py-4">Nama User</th>
                         <th className="px-6 py-4">Email</th>
-                        <th className="px-6 py-4">Password</th> {/* NEW COLUMN */}
+                        <th className="px-6 py-4">Password</th>
                         <th className="px-6 py-4 text-center">Role</th>
                         <th className="px-6 py-4 text-center">Aksi</th>
                     </tr>
@@ -328,7 +294,6 @@ const AdminDashboard: React.FC = () => {
                          <input type="email" required placeholder="nama@email.com" value={editingUser.email || ''} onChange={(e) => setEditingUser({...editingUser, email: e.target.value})} disabled={!!editingUser.id} className="w-full pl-11 p-3.5 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all text-slate-900 disabled:opacity-60" />
                     </InputGroup>
 
-                    {/* Password Field (Visible for both Create and Edit to allow Reset) */}
                     <InputGroup label={editingUser.id ? "Reset Password (Opsional)" : "Password Default"} icon={Shield} value={newUserPassword} onChange={setNewUserPassword}>
                             <input 
                                 type="text" 

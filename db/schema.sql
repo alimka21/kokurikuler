@@ -137,15 +137,17 @@ using ( public.is_admin() );
 -- ==========================================
 
 -- A. Auto-Sync User from Auth
+-- FIXED: Now correctly maps force_password_change from metadata to public table
 create or replace function public.handle_new_user() 
 returns trigger as $$
 begin
-  insert into public.users (id, email, name, role, created_at, updated_at)
+  insert into public.users (id, email, name, role, force_password_change, created_at, updated_at)
   values (
     new.id, 
     new.email, 
     coalesce(new.raw_user_meta_data->>'name', 'Pengguna Baru'),
     'user', -- Force default role to 'user'
+    coalesce((new.raw_user_meta_data->>'force_password_change')::boolean, false),
     now(),
     now()
   )

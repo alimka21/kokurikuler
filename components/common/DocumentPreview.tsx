@@ -122,6 +122,11 @@ const DocumentPreview: React.FC<Props> = ({ project }) => {
                                         <div className="font-bold mb-2">
                                             {getAlphabetIndex(i)}. {act.name} ({act.jp} JP)
                                         </div>
+                                        {/* Description Paragraph */}
+                                        {act.description && (
+                                            <p className="mb-2 italic text-gray-700">{act.description}</p>
+                                        )}
+                                        {/* Steps List */}
                                         {act.steps && act.steps.length > 0 ? (
                                             <ol className="list-decimal pl-5 m-0 space-y-1 text-base">
                                                 {act.steps.map((step, idx) => (
@@ -129,7 +134,7 @@ const DocumentPreview: React.FC<Props> = ({ project }) => {
                                                 ))}
                                             </ol>
                                         ) : (
-                                            <p className="pl-4 mt-1 text-base italic text-gray-500">{act.description}</p>
+                                            <p className="pl-4 mt-1 text-base italic text-gray-500">Belum ada rincian langkah.</p>
                                         )}
                                     </div>
                                 ))}
