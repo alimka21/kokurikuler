@@ -6,6 +6,7 @@ import { NotificationToast, NotificationType } from './components/common/UiKit';
 import Swal from 'sweetalert2';
 import { getAccessToken } from './services/supabaseClient';
 import { generateAndDownloadDocx, generateAnnualProgramDocx } from './utils/docxGenerator';
+import { ContextAnalysisData, Dimension, ProjectGoal, Activity } from './types';
 
 // View Components
 import MyProjects from './components/MyProjects';
@@ -231,15 +232,34 @@ const AuthorizedView: React.FC = () => {
 
     const renderStepContent = () => {
         switch (currentStep + 1) {
-            case 1: return <StepIdentity project={project} onChange={actions.updateProject} savedProjects={savedProjects} onSmartSkip={() => actions.goToStep(3)} />;
-            case 2: return <StepAnalysis data={project.contextAnalysis} phase={project.phase} targetClass={project.targetClass} onUpdateData={(d) => actions.updateProject('contextAnalysis', d)} onAnalyze={actions.runAnalysis} summary={project.analysisSummary} isAnalyzing={loadingAI} />;
-            case 3: return <StepDimensions recommended={project.recommendedDimensions} selected={project.selectedDimensions} onSelect={(dims) => actions.updateProject('selectedDimensions', dims)} isLoading={loadingAI} />;
-            case 4: return <StepThemeAndFormat options={project.themeOptions} selectedTheme={project.selectedTheme} onSelectTheme={(t, r) => { actions.updateProject('selectedTheme', t); actions.updateProject('selectedThemeReason', r); }} activityFormat={project.activityFormat} onSelectFormat={(f) => actions.updateProject('activityFormat', f)} creativeIdeas={project.creativeIdeas} selectedIdea={project.title} onSelectIdea={(t) => { actions.updateProject('title', t); const sel = project.creativeIdeas.find(i => i.title === t); if(sel) actions.updateProject('projectDescription', sel.description); }} onGenerateIdeas={actions.runCreativeIdeaGen} isLoading={loadingAI} onGenerateThemes={actions.runThemeRecommend} hasDownstreamData={project.projectGoals.length > 0 || project.activities.length > 0} />;
-            case 5: return <StepGoals goals={project.projectGoals} setGoals={(g) => actions.updateProject('projectGoals', g)} onGenerate={actions.runGoalDraft} isGenerating={loadingAI} phase={project.phase} />;
+            case 1: 
+                return <StepIdentity project={project} onChange={actions.updateProject} savedProjects={savedProjects} onSmartSkip={() => actions.goToStep(3)} />;
+            case 2: 
+                return <StepAnalysis data={project.contextAnalysis} phase={project.phase} targetClass={project.targetClass} onUpdateData={(d: ContextAnalysisData) => actions.updateProject('contextAnalysis', d)} onAnalyze={actions.runAnalysis} summary={project.analysisSummary} isAnalyzing={loadingAI} />;
+            case 3: 
+                return <StepDimensions recommended={project.recommendedDimensions} selected={project.selectedDimensions} onSelect={(dims: Dimension[]) => actions.updateProject('selectedDimensions', dims)} isLoading={loadingAI} />;
+            case 4: 
+                return <StepThemeAndFormat 
+                    options={project.themeOptions} 
+                    selectedTheme={project.selectedTheme} 
+                    onSelectTheme={(t: string, r: string) => { actions.updateProject('selectedTheme', t); actions.updateProject('selectedThemeReason', r); }} 
+                    activityFormat={project.activityFormat} 
+                    onSelectFormat={(f: string) => actions.updateProject('activityFormat', f)} 
+                    creativeIdeas={project.creativeIdeas} 
+                    selectedIdea={project.title} 
+                    onSelectIdea={(t: string) => { actions.updateProject('title', t); const sel = project.creativeIdeas.find(i => i.title === t); if(sel) actions.updateProject('projectDescription', sel.description); }} 
+                    onGenerateIdeas={actions.runCreativeIdeaGen} 
+                    isLoading={loadingAI} 
+                    onGenerateThemes={actions.runThemeRecommend} 
+                    hasDownstreamData={project.projectGoals.length > 0 || project.activities.length > 0} 
+                />;
+            case 5: 
+                return <StepGoals goals={project.projectGoals} setGoals={(g: ProjectGoal[]) => actions.updateProject('projectGoals', g)} onGenerate={actions.runGoalDraft} isGenerating={loadingAI} phase={project.phase} />;
             case 6: 
                 const usedByOthers = savedProjects.filter(p => p.targetClass === project.targetClass && p.id !== project.id).reduce((acc, p) => acc + (p.projectJpAllocation || 0), 0);
-                return <StepActivityPlanning totalJp={project.projectJpAllocation} totalAnnualJp={project.totalJpAnnual} usedByOthers={usedByOthers} setTotalJp={(v) => actions.updateProject('projectJpAllocation', v)} activities={project.activities} setActivities={(a) => actions.updateProject('activities', a)} onGenerate={actions.runActivityPlan} isGenerating={loadingAI} />;
-            case 7: return <StepFinalization project={project} isReady={!!project.assessmentPlan} isFinalizing={isFinalizing} themeName={project.selectedTheme} onFinalize={actions.runFinalization} onViewEditor={() => setView('editor')} onDownload={handleExportDocx} onDownloadAnnual={handleExportAnnualDocx} onSaveProject={actions.saveProject} onReset={handleReset} />;
+                return <StepActivityPlanning totalJp={project.projectJpAllocation} totalAnnualJp={project.totalJpAnnual} usedByOthers={usedByOthers} setTotalJp={(v: number) => actions.updateProject('projectJpAllocation', v)} activities={project.activities} setActivities={(a: Activity[]) => actions.updateProject('activities', a)} onGenerate={actions.runActivityPlan} isGenerating={loadingAI} />;
+            case 7: 
+                return <StepFinalization project={project} isReady={!!project.assessmentPlan} isFinalizing={isFinalizing} themeName={project.selectedTheme} onFinalize={actions.runFinalization} onViewEditor={() => setView('editor')} onDownload={handleExportDocx} onDownloadAnnual={handleExportAnnualDocx} onSaveProject={actions.saveProject} onReset={handleReset} />;
             default: return null;
         }
     };
