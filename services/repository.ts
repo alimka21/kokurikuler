@@ -109,10 +109,11 @@ export const UserRepository = {
 };
 
 export const ProjectRepository = {
-    async getProjectsByUser(email: string): Promise<ProjectState[] | null> {
+    async getProjectsByUser(userId: string): Promise<ProjectState[] | null> {
         const { data, error } = await supabase
             .from('projects')
             .select('*')
+            .eq('user_id', userId) // Enforce isolation by user_id
             .order('updated_at', { ascending: false });
 
         if (error) {
@@ -145,6 +146,40 @@ export const ProjectRepository = {
         });
     },
 
+    async findTemplateByHash(hash: string): Promise<ProjectState | null> {
+        // Find ANY project with this hash (Global Search)
+        // We order by created_at desc to get the latest/freshest template
+        const { data, error } = await supabase
+            .from('projects')
+            .select('*')
+            .eq('context_hash', hash)
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .maybeSingle();
+
+        if (error || !data) return null;
+
+        // Convert to ProjectState
+        const content = data.content || {};
+        const templateState: ProjectState = {
+            ...INITIAL_PROJECT_STATE,
+            ...content,
+            // IMPORTANT: Reset ID and ownership-related fields when used as template
+            id: crypto.randomUUID(), 
+            schoolName: "", // Reset school specific info
+            coordinatorName: "",
+            coordinatorNip: "",
+            principalName: "",
+            principalNip: "",
+            signaturePlace: "",
+            signatureDate: new Date().toISOString().split('T')[0],
+            // Keep the AI generated content
+            contextHash: hash
+        };
+        
+        return templateState;
+    },
+
     async saveProject(project: ProjectState, user: { id: string; email: string }): Promise<void> {
         const payload: Partial<DbProject> = {
             id: project.id,
@@ -153,7 +188,8 @@ export const ProjectRepository = {
             title: project.title,
             phase: project.phase,
             target_class: project.targetClass,
-            content: project, 
+            content: project,
+            context_hash: project.contextHash, // Save the hash
             updated_at: new Date().toISOString()
         };
 
@@ -166,8 +202,14 @@ export const ProjectRepository = {
         }
     },
 
-    async deleteProject(projectId: string): Promise<void> {
-        const { error } = await supabase.from('projects').delete().eq('id', projectId);
+    async deleteProject(projectId: string, userId: string): Promise<void> {
+        // Enforce isolation: only delete if id AND user_id match
+        const { error } = await supabase
+            .from('projects')
+            .delete()
+            .eq('id', projectId)
+            .eq('user_id', userId);
+            
         if (error) {
              if (error.code === '42P17') return;
              throw error;

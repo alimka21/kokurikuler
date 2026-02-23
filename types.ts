@@ -100,6 +100,7 @@ export interface ProjectState {
   id: string; // Unique ID for the project
   lastUpdated: number; // Timestamp
   lastStep?: number; // New: Save Wizard Progress
+  contextHash?: string; // New: For Template Matching
 
   // Identity (Admin Settings - Moved to Sidebar Modal)
   schoolName: string;

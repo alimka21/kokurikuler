@@ -89,6 +89,25 @@ const handleAIError = (e: any) => {
     }
 };
 
+// --- HELPER: HASHING ---
+const generateContextHash = (project: ProjectState): string => {
+    // Hash based on Phase, Class, and Context Analysis
+    const data = {
+        phase: project.phase,
+        class: project.targetClass,
+        analysis: project.contextAnalysis
+    };
+    // Simple string hash for demo (in prod use SHA-256)
+    const str = JSON.stringify(data);
+    let hash = 0;
+    for (let i = 0; i < str.length; i++) {
+        const char = str.charCodeAt(i);
+        hash = ((hash << 5) - hash) + char;
+        hash = hash & hash; // Convert to 32bit integer
+    }
+    return hash.toString(16);
+};
+
 export interface ProjectStoreState {
     project: ProjectState;
     savedProjects: ProjectState[];
@@ -118,6 +137,8 @@ export interface ProjectStoreState {
         
         // AI Actions
         runAnalysis: () => Promise<void>;
+        checkForTemplate: () => Promise<boolean>; // New: Check for reuse
+        adoptTemplate: (template: ProjectState) => void; // New: Apply reuse
         autoRunDimensions: () => Promise<void>;
         runThemeRecommend: () => Promise<void>;
         runCreativeIdeaGen: () => Promise<void>;
@@ -155,7 +176,8 @@ export const useProjectStore = create<ProjectStoreState>()(
                     const user = get().currentUser;
                     if (!user || user.id === 'emergency-admin-id') return;
                     try {
-                        const projects = await ProjectRepository.getProjectsByUser(user.email);
+                        // Updated: Pass user.id for isolation
+                        const projects = await ProjectRepository.getProjectsByUser(user.id);
                         if (projects) set({ savedProjects: projects });
                     } catch (e) { console.error(e); }
                 },
@@ -199,7 +221,14 @@ export const useProjectStore = create<ProjectStoreState>()(
                     const { project, currentUser, currentStep } = get();
                     if (!currentUser) return;
 
-                    const updatedProject = { ...project, lastUpdated: Date.now(), lastStep: currentStep };
+                    // Calculate Hash before saving
+                    const contextHash = generateContextHash(project);
+                    const updatedProject = { 
+                        ...project, 
+                        lastUpdated: Date.now(), 
+                        lastStep: currentStep,
+                        contextHash: contextHash 
+                    };
                     
                     // Optimistic Update
                     set((state) => {
@@ -229,8 +258,12 @@ export const useProjectStore = create<ProjectStoreState>()(
                 },
 
                 deleteProject: async (id) => {
+                    const user = get().currentUser;
+                    if (!user) return;
+                    
                     try {
-                        await ProjectRepository.deleteProject(id);
+                        // Updated: Pass user.id for ownership check
+                        await ProjectRepository.deleteProject(id, user.id);
                         set((state) => {
                             state.savedProjects = state.savedProjects.filter(p => p.id !== id);
                             if (state.project.id === id) {
@@ -349,9 +382,72 @@ export const useProjectStore = create<ProjectStoreState>()(
                 },
 
                 // --- AI Wrappers ---
+                checkForTemplate: async () => {
+                    const { project } = get();
+                    const hash = generateContextHash(project);
+                    set({ loadingAI: true });
+                    try {
+                        const template = await ProjectRepository.findTemplateByHash(hash);
+                        set({ loadingAI: false });
+                        if (template) {
+                            const result = await Swal.fire({
+                                icon: 'info',
+                                title: 'Projek Serupa Ditemukan!',
+                                text: 'Sistem menemukan projek dengan konteks yang sama. Apakah Anda ingin menggunakan hasil analisis dan rekomendasi yang sudah ada?',
+                                showCancelButton: true,
+                                confirmButtonText: 'Ya, Gunakan Template',
+                                cancelButtonText: 'Tidak, Analisis Ulang'
+                            });
+                            
+                            if (result.isConfirmed) {
+                                get().actions.adoptTemplate(template);
+                                return true;
+                            }
+                        }
+                        return false;
+                    } catch (e) {
+                         console.error(e);
+                         set({ loadingAI: false });
+                         return false;
+                    }
+                },
+
+                adoptTemplate: (template: ProjectState) => {
+                    const current = get().project;
+                    // Merge template content but keep current identity
+                    const adoptedProject: ProjectState = {
+                        ...template,
+                        id: current.id, // Keep current ID
+                        schoolName: current.schoolName, // Keep current identity
+                        coordinatorName: current.coordinatorName,
+                        coordinatorNip: current.coordinatorNip,
+                        principalName: current.principalName,
+                        principalNip: current.principalNip,
+                        signaturePlace: current.signaturePlace,
+                        signatureDate: current.signatureDate,
+                        
+                        // Ensure context matches exactly what we have (it should, but safety first)
+                        phase: current.phase,
+                        targetClass: current.targetClass,
+                        contextAnalysis: current.contextAnalysis,
+                        
+                        lastUpdated: Date.now(),
+                        lastStep: template.lastStep || 3 // Jump to where the template left off
+                    };
+                    
+                    set({ project: adoptedProject, currentStep: adoptedProject.lastStep || 3 });
+                    Swal.fire('Berhasil', 'Template projek berhasil diterapkan.', 'success');
+                },
+
                 runAnalysis: async () => {
                     const { project } = get();
                     if (!checkPrerequisites(project, get().currentStep, 'analyze')) return;
+                    
+                    // 1. Check for Template Reuse
+                    const reused = await get().actions.checkForTemplate();
+                    if (reused) return;
+
+                    // 2. If no reuse, run AI
                     set({ loadingAI: true });
                     try {
                         const d = project.contextAnalysis;

@@ -30,6 +30,7 @@ export interface DbProject {
     activity_format?: string; // Optional (Moved to content)
     analysis_summary?: string; // Optional (Moved to content)
     content: any; // JSONB storage for complex nested state (Primary Source)
+    context_hash?: string; // New: For Template Matching
     created_at?: string;
     updated_at?: string;
 }
