@@ -179,7 +179,7 @@ export const useProjectStore = create<ProjectStoreState>()(
                         // Updated: Pass user.id for isolation
                         const projects = await ProjectRepository.getProjectsByUser(user.id);
                         if (projects) set({ savedProjects: projects });
-                    } catch (e) { console.error(e); }
+                    } catch (e) { console.warn(e); }
                 },
 
                 updateProject: (field, value) => {
@@ -406,7 +406,7 @@ export const useProjectStore = create<ProjectStoreState>()(
                         }
                         return false;
                     } catch (e) {
-                         console.error(e);
+                         console.warn(e);
                          set({ loadingAI: false });
                          return false;
                     }

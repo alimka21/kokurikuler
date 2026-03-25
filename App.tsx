@@ -81,6 +81,8 @@ const AuthorizedView: React.FC = () => {
                 if (token) {
                     console.log("%c🔑 JWT Token:", "color: #558B6E; font-weight: bold; font-size: 12px;", token);
                 }
+            }).catch(err => {
+                console.warn("Failed to get access token:", err.message);
             });
         }
     }, [user]);

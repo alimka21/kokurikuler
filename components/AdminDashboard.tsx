@@ -53,7 +53,7 @@ const AdminDashboard: React.FC = () => {
       const usersData = await UserRepository.getAllUsers();
       setUsers(usersData);
     } catch (error: any) {
-      console.error("Error fetching admin data:", error);
+      console.warn("Warning fetching admin data:", error.message || error);
     } finally {
       setLoading(false);
     }

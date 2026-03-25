@@ -37,6 +37,8 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
             if (isMounted.current && url) {
                 setSubscriptionUrl(url);
             }
+        }).catch(err => {
+            console.warn("Failed to fetch subscription URL:", err.message || err);
         });
 
         return () => { isMounted.current = false; };
@@ -99,8 +101,8 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
 
             if (msg === "Invalid login credentials") {
                 msg = "Email atau kata sandi salah.";
-            } else if (lowerMsg.includes("fetch failed")) {
-                msg = "Gagal terhubung ke server.";
+            } else if (lowerMsg.includes("fetch failed") || lowerMsg.includes("failed to fetch")) {
+                msg = "Gagal terhubung ke server. Periksa koneksi internet Anda.";
             } else if (msg === "ACCOUNT_DISABLED") {
                 msg = "Akun dinonaktifkan. Hubungi admin.";
             }
@@ -144,12 +146,6 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
                          </a>
                      </div>
                 </div>
-
-                <a href="https://pakarmodul.vercel.app/" target="_blank" className="mt-6 group relative inline-flex items-center justify-center px-8 py-3 text-sm font-bold text-white bg-gradient-to-r from-orange-500 to-amber-500 rounded-full shadow-2xl hover:from-orange-600 hover:to-amber-600 hover:scale-105 transition-all">
-                    <Rocket className="w-4 h-4 mr-2 text-white animate-pulse" />
-                    <span>Buka Pakar Modul Ajar</span>
-                    <ExternalLink className="w-3 h-3 ml-2 opacity-80" />
-                </a>
              </div>
           </div>
 

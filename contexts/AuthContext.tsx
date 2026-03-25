@@ -52,7 +52,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                     if (!insertError) {
                         dbProfile = newProfile;
                     } else {
-                        console.error("Failed to sync user to public table:", insertError);
+                        console.warn("Failed to sync user to public table:", insertError);
                     }
                 }
 
@@ -94,7 +94,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 
                 if (mounted) setUser(mergedUser);
             } catch (e) {
-                console.error("Profile Sync Error", e);
+                console.warn("Profile Sync Error", e);
                 if (mounted) {
                     setUser(prev => prev || {
                         id: authUser.id,
@@ -140,8 +140,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 // 2. Sync profile in background (No await, no Promise.race, no timeout hack)
                 syncUserProfile(authUser);
 
-            } catch (e) {
-                console.error("[Auth] Init Error:", e);
+            } catch (e: any) {
+                console.warn("[Auth] Init Warning:", e.message || e);
                 if (mounted) setIsLoading(false);
             }
         };

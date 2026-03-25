@@ -1,33 +1,27 @@
 
 import { createClient } from '@supabase/supabase-js';
 
-// Helper untuk mengambil env variable (Vite / Process)
-const getEnv = (key: string) => {
-    // @ts-ignore
-    if (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env[key]) {
-        // @ts-ignore
-        return import.meta.env[key];
-    }
-    // @ts-ignore
-    if (typeof process !== 'undefined' && process.env && process.env[key]) {
-        // @ts-ignore
-        return process.env[key];
-    }
-    return '';
-};
-
 // Fallback credentials (Provided manually to fix missing env error)
 const FALLBACK_URL = 'https://ndawqyzvvyzqtqyxchjl.supabase.co';
 const FALLBACK_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5kYXdxeXp2dnl6cXRxeXhjaGpsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzEyMjgxNzIsImV4cCI6MjA4NjgwNDE3Mn0.GWF1r6GPORrooNRVDkWrRDeGmowTHCod8NF3HFUMc5M';
 
 // EXPORT THESE CONSTANTS
-export const supabaseUrl = getEnv('VITE_SUPABASE_URL') || FALLBACK_URL;
-export const supabaseAnonKey = getEnv('VITE_SUPABASE_ANON_KEY') || FALLBACK_KEY;
+let envUrl = import.meta.env.VITE_SUPABASE_URL || '';
+let envKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
+
+// Validate URL format
+if (envUrl && !envUrl.startsWith('http')) {
+    console.warn("VITE_SUPABASE_URL is invalid. Using fallback.");
+    envUrl = '';
+}
+
+export const supabaseUrl = envUrl || FALLBACK_URL;
+export const supabaseAnonKey = envKey || FALLBACK_KEY;
 
 export const isSupabaseConfigured = !!(supabaseUrl && supabaseAnonKey);
 
 if (!isSupabaseConfigured) {
-    console.error("CRITICAL: VITE_SUPABASE_URL or VITE_SUPABASE_ANON_KEY is missing. Please check your .env file.");
+    console.warn("CRITICAL: VITE_SUPABASE_URL or VITE_SUPABASE_ANON_KEY is missing. Please check your .env file.");
 }
 
 // Ensure valid strings are passed to createClient

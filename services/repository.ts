@@ -39,8 +39,8 @@ export const UserRepository = {
                  return null; // Return null so AuthContext can handle it (create new user or fallback)
             }
             return data as DbUser;
-        } catch (err) {
-            console.error("[Repository] Unexpected Error:", err);
+        } catch (err: any) {
+            console.warn("[Repository] Unexpected Error:", err.message || err);
             return null;
         }
     },
@@ -52,7 +52,7 @@ export const UserRepository = {
             .order('created_at', { ascending: false });
         
         if (error) {
-            console.error("Error fetching all users:", error);
+            console.warn("Error fetching all users:", error.message || error);
             return [];
         }
         
@@ -196,7 +196,7 @@ export const ProjectRepository = {
         const { error } = await supabase.from('projects').upsert(payload);
         
         if (error) {
-            console.error("Supabase Save Error:", error);
+            console.warn("Supabase Save Error:", error.message || error);
             if (error.code === '42P17') return;
             throw error;
         }

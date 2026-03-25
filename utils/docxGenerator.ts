@@ -70,13 +70,17 @@ const formatListToParagraphs = (text: string | undefined): Paragraph[] => {
 };
 
 // Helper: Convert Array of Strings to Numbered List Paragraphs
-const formatArrayToNumberedList = (items: string[] | undefined): Paragraph[] => {
+const formatArrayToNumberedList = (items: string[] | undefined, reference: string): Paragraph[] => {
     if (!items || items.length === 0) {
         return [new Paragraph({ children: [new TextRun({ text: "-", font: "Times New Roman", size: 24 })] })];
     }
 
-    return items.map((item, i) => new Paragraph({
-        children: [new TextRun({ text: `${i + 1}. ${item}`, font: "Times New Roman", size: 24 })],
+    return items.map((item) => new Paragraph({
+        children: [new TextRun({ text: item, font: "Times New Roman", size: 24 })],
+        numbering: {
+            reference: reference,
+            level: 0
+        },
         spacing: { after: 120 }
     }));
 };
@@ -149,22 +153,23 @@ export const generateAndDownloadDocx = async (project: ProjectState) => {
     // --- DATA PROCESSING ---
 
     // 1. Dimensions (Numbered List)
-    const dimensionParagraphs = formatArrayToNumberedList(project.selectedDimensions);
+    const dimensionParagraphs = formatArrayToNumberedList(project.selectedDimensions, "dimensions-list");
 
     // 2. Goals (Numbered List)
     const goalParagraphs = project.projectGoals.length > 0
-        ? project.projectGoals.map((g, i) => new Paragraph({
-            children: [new TextRun({ text: `${i + 1}. ${g.description}`, font: "Times New Roman", size: 24 })],
+        ? project.projectGoals.map((g) => new Paragraph({
+            children: [new TextRun({ text: g.description, font: "Times New Roman", size: 24 })],
+            numbering: { reference: "goals-list", level: 0 },
             spacing: { after: 120 }
         }))
         : [new Paragraph({ children: [new TextRun({ text: "-", font: "Times New Roman", size: 24 })] })];
 
     // 3. Location (Numbered List)
-    const locationParagraphs = formatArrayToNumberedList(project.activityLocations);
+    const locationParagraphs = formatArrayToNumberedList(project.activityLocations, "locations-list");
 
     // 4. Subjects (Unique & Numbered)
     const uniqueSubjects = Array.from(new Set(project.projectGoals.flatMap(g => g.subjects)));
-    const subjectParagraphs = formatArrayToNumberedList(uniqueSubjects);
+    const subjectParagraphs = formatArrayToNumberedList(uniqueSubjects, "subjects-list");
 
     // 5. Full Description (Simplified: NO Context Analysis)
     const fullDescription = project.projectDescription || "Belum ada deskripsi.";
@@ -191,13 +196,13 @@ export const generateAndDownloadDocx = async (project: ProjectState) => {
 
         // C. Detailed Steps (Numbered List)
         if (act.steps && act.steps.length > 0) {
-            act.steps.forEach((step, stepIdx) => {
+            act.steps.forEach((step) => {
                 // Remove existing numbering if AI included it (e.g., "1. Guru...")
                 const cleanStep = step.replace(/^\d+[\.\)]\s*/, '');
                 
                 activityParagraphs.push(new Paragraph({
-                    children: [new TextRun({ text: `${stepIdx + 1}. ${cleanStep}`, font: "Times New Roman", size: 24 })],
-                    indent: { left: 360 }, // Indent to align with text above
+                    children: [new TextRun({ text: cleanStep, font: "Times New Roman", size: 24 })],
+                    numbering: { reference: `activity-steps-${i}`, level: 0 },
                     spacing: { after: 60 }
                 }));
             });
@@ -257,7 +262,37 @@ export const generateAndDownloadDocx = async (project: ProjectState) => {
         }));
     }
 
+    const createNumberingConfig = (reference: string, leftIndent = 360) => ({
+        reference,
+        levels: [
+            {
+                level: 0,
+                format: "decimal" as const,
+                text: "%1.",
+                alignment: AlignmentType.START,
+                style: {
+                    run: { font: "Times New Roman", size: 24 },
+                    paragraph: { indent: { left: leftIndent, hanging: 360 } }
+                }
+            }
+        ]
+    });
+
+    const numberingConfigs = [
+        createNumberingConfig("dimensions-list"),
+        createNumberingConfig("goals-list"),
+        createNumberingConfig("locations-list"),
+        createNumberingConfig("subjects-list"),
+    ];
+
+    project.activities.forEach((_, i) => {
+        numberingConfigs.push(createNumberingConfig(`activity-steps-${i}`, 720)); // Indent further for sub-steps
+    });
+
     const doc = new Document({
+        numbering: {
+            config: numberingConfigs
+        },
         styles: {
             paragraphStyles: [{
                 id: "Normal",

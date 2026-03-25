@@ -74,7 +74,7 @@ const ForcePasswordChange: React.FC<Props> = ({ onSuccess }) => {
         onSuccess();
 
     } catch (err: any) {
-        console.error("Activation Error:", err);
+        console.warn("Activation Error:", err.message || err);
         Swal.fire('Gagal', err.message || "Terjadi kesalahan saat aktivasi.", 'error');
     } finally {
         setLoading(false);

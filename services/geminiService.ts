@@ -5,20 +5,10 @@ import { SUBJECTS_BY_PHASE, DEFAULT_SUBJECTS } from "../constants";
 import { tokenManager } from "../utils/tokenManager";
 
 // Safe env access
-const getEnv = (key: string) => {
+const getGeminiKey = () => {
     try {
-        // @ts-ignore
-        if (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env[key]) {
-            // @ts-ignore
-            return import.meta.env[key];
-        }
-    } catch (e) {}
-
-    try {
-        // @ts-ignore
-        if (typeof process !== 'undefined' && process.env && process.env[key]) {
-            // @ts-ignore
-            return process.env[key];
+        if (typeof import.meta !== 'undefined' && import.meta.env) {
+            return import.meta.env.VITE_GEMINI_API_KEY || import.meta.env.API_KEY || '';
         }
     } catch (e) {}
     return '';
@@ -28,7 +18,7 @@ const getEnv = (key: string) => {
 // Strategi: Prioritaskan Custom Key (TokenManager), Fallback ke System Key (Env)
 const getAiClient = (): GoogleGenAI => {
     const customKey = tokenManager.getKey();
-    const systemKey = getEnv('VITE_GEMINI_API_KEY') || getEnv('API_KEY');
+    const systemKey = getGeminiKey();
     
     const finalKey = customKey || systemKey;
 
@@ -49,8 +39,8 @@ export const validateApiKey = async (key: string): Promise<boolean> => {
             contents: 'Test connection',
         });
         return true;
-    } catch (e) {
-        console.error("API Key Validation Failed:", e);
+    } catch (e: any) {
+        console.warn("API Key Validation Failed:", e.message || e);
         return false;
     }
 }
@@ -179,7 +169,7 @@ async function generateWithRetry<T>(
 
             // If we run out of retries, throw or return fallback
             if (attempts >= maxRetries) {
-                console.error(`[AI-Agent] Failed after ${maxRetries} attempts. Last error: ${msg}`);
+                console.warn(`[AI-Agent] Failed after ${maxRetries} attempts. Last error: ${msg}`);
                 // If specific API error, throw it up
                 handleGeminiError(error);
                 return null; 
