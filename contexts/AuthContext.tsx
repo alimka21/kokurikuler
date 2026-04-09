@@ -4,6 +4,7 @@ import { User } from '../types';
 import { supabase } from '../services/supabaseClient';
 import { UserRepository } from '../services/repository';
 import { tokenManager } from '../utils/tokenManager';
+import { syncDeviceSession, checkDeviceAllowed } from '../utils/deviceManager';
 import Swal from 'sweetalert2';
 
 interface AuthContextType {
@@ -30,6 +31,26 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             profileSyncInProgress = true;
 
             try {
+                // DEVICE MANAGEMENT: Check if this device is allowed
+                if (!checkDeviceAllowed(authUser)) {
+                    console.warn("[Auth] Device not allowed. Logging out locally.");
+                    await supabase.auth.signOut();
+                    if (mounted) {
+                        setUser(null);
+                        setIsLoading(false);
+                    }
+                    Swal.fire({
+                        icon: 'warning',
+                        title: 'Sesi Berakhir',
+                        text: 'Sesi Anda pada perangkat ini telah diakhiri dari perangkat lain.',
+                        confirmButtonColor: '#d33'
+                    });
+                    return;
+                }
+
+                // DEVICE MANAGEMENT: Sync this device
+                await syncDeviceSession(authUser);
+
                 // Fetch additional profile data from public.users
                 let dbProfile = await UserRepository.getCurrentProfile(authUser.id);
                 
@@ -169,6 +190,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const login = (u: User) => setUser(u);
     const logout = async () => {
+        try {
+            const { data: { user: currentUser } } = await supabase.auth.getUser();
+            if (currentUser && currentUser.user_metadata?.devices) {
+                const currentDeviceId = localStorage.getItem('pakar_device_id');
+                const updatedDevices = currentUser.user_metadata.devices.filter((d: any) => d.deviceId !== currentDeviceId);
+                await supabase.auth.updateUser({ data: { devices: updatedDevices } });
+            }
+        } catch (e) {
+            console.warn("Failed to remove device on logout", e);
+        }
+        
         tokenManager.clearKey();
         await supabase.auth.signOut();
         setUser(null);

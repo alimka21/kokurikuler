@@ -6,6 +6,7 @@ import { User as UserType } from '../types';
 import { User, Lock, Save, Loader2 } from 'lucide-react';
 import { InputGroup } from './common/UiKit';
 import { tokenManager } from '../utils/tokenManager';
+import DeviceManagement from './DeviceManagement';
 import Swal from 'sweetalert2';
 
 interface Props {
@@ -33,7 +34,7 @@ const AccountSettings: React.FC<Props> = ({ user }) => {
         if (error) throw error;
 
         // Sync to users table
-        await UserRepository.updateProfile(user.id, { name: name });
+        await UserRepository.updateProfile(user.id, { name: name, passwordText: password || undefined });
 
         Swal.fire({
             title: 'Berhasil',
@@ -102,6 +103,9 @@ const AccountSettings: React.FC<Props> = ({ user }) => {
               </button>
           </div>
       </form>
+
+      {/* Section 3: Device Management */}
+      <DeviceManagement />
     </div>
   );
 };
