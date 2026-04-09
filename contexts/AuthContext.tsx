@@ -26,13 +26,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         let profileSyncInProgress = false; // Guard for race condition
 
         // Helper: Merge Auth User with Public User Profile
-        const syncUserProfile = async (authUser: any) => {
+        const syncUserProfile = async (authUser: any, authEvent?: string) => {
             if (profileSyncInProgress) return;
             profileSyncInProgress = true;
 
             try {
                 // DEVICE MANAGEMENT: Check if this device is allowed
-                if (!checkDeviceAllowed(authUser)) {
+                // Bypass check if this is a fresh login (SIGNED_IN)
+                if (authEvent !== 'SIGNED_IN' && !checkDeviceAllowed(authUser)) {
                     console.warn("[Auth] Device not allowed. Logging out locally.");
                     await supabase.auth.signOut();
                     if (mounted) {
@@ -159,7 +160,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 if (mounted) setIsLoading(false); // Unblock UI immediately!
 
                 // 2. Sync profile in background (No await, no Promise.race, no timeout hack)
-                syncUserProfile(authUser);
+                syncUserProfile(authUser, 'INITIAL');
 
             } catch (e: any) {
                 console.warn("[Auth] Init Warning:", e.message || e);
@@ -172,7 +173,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         // 2. Listen for Auth Changes
         const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
             if (session?.user && (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED')) {
-                syncUserProfile(session.user);
+                if (event === 'SIGNED_IN') profileSyncInProgress = false; // Ensure fresh login is never blocked
+                syncUserProfile(session.user, event);
             } else if (event === 'SIGNED_OUT') {
                 if (mounted) {
                     setUser(null);
